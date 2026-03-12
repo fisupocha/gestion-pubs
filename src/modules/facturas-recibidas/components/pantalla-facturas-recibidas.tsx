@@ -692,6 +692,18 @@ export function PantallaFacturasRecibidas() {
     >;
     const familiaLabel =
       familias[registro.familia]?.label ?? registro.familia;
+    const totalBaseRegistro = round2(
+      parseDecimal(registro.base0) +
+        parseDecimal(registro.base4) +
+        parseDecimal(registro.base10) +
+        parseDecimal(registro.base21)
+    );
+    const totalIvaRegistro = round2(
+      (parseDecimal(registro.base4) * 4) / 100 +
+        (parseDecimal(registro.base10) * 10) / 100 +
+        (parseDecimal(registro.base21) * 21) / 100
+    );
+    const totalFacturaRegistro = round2(totalBaseRegistro + totalIvaRegistro);
 
     return [
       String(registro.id),
@@ -706,14 +718,11 @@ export function PantallaFacturasRecibidas() {
       registro.base4,
       registro.base10,
       registro.base21,
-      fmtMoney(
-        round2(
-          parseDecimal(registro.base0) +
-            parseDecimal(registro.base4) +
-            parseDecimal(registro.base10) +
-            parseDecimal(registro.base21)
-        )
-      ),
+      fmtMoney(totalBaseRegistro),
+      fmtMoney(totalIvaRegistro),
+      fmtMoney(totalFacturaRegistro),
+      registro.pagado ? "pagado" : "pendiente",
+      registro.fechaPago,
       registro.observaciones,
       registro.formaPago,
       registro.banco,
