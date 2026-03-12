@@ -352,11 +352,15 @@ export function PantallaFacturasRecibidas() {
       return [];
     }
 
-    return (
-      CLASIFICACION[formulario.tipo].familias[
-        formulario.familia as keyof (typeof CLASIFICACION)[TipoClasificacion]["familias"]
-      ]?.subfamilias ?? []
-    );
+    const familias = CLASIFICACION[formulario.tipo].familias as Record<
+      string,
+      {
+        label: string;
+        subfamilias: readonly string[];
+      }
+    >;
+
+    return [...(familias[formulario.familia]?.subfamilias ?? [])];
   }, [formulario.familia, formulario.tipo]);
 
   const base0 = parseDecimal(formulario.base0);
@@ -678,10 +682,15 @@ export function PantallaFacturasRecibidas() {
 
   function obtenerCamposBusqueda(registro: RegistroFactura) {
     const tipoLabel = CLASIFICACION[registro.tipo].label;
+    const familias = CLASIFICACION[registro.tipo].familias as Record<
+      string,
+      {
+        label: string;
+        subfamilias: readonly string[];
+      }
+    >;
     const familiaLabel =
-      CLASIFICACION[registro.tipo].familias[
-        registro.familia as keyof (typeof CLASIFICACION)[TipoClasificacion]["familias"]
-      ]?.label ?? registro.familia;
+      familias[registro.familia]?.label ?? registro.familia;
 
     return [
       String(registro.id),
