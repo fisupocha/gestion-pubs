@@ -681,8 +681,9 @@ export function PantallaFacturasRecibidas() {
   }
 
   function obtenerCamposBusqueda(registro: RegistroFactura) {
-    const tipoLabel = CLASIFICACION[registro.tipo].label;
-    const familias = CLASIFICACION[registro.tipo].familias as Record<
+    const tipoConfig = registro.tipo ? CLASIFICACION[registro.tipo] : null;
+    const tipoLabel = tipoConfig?.label ?? "";
+    const familias = (tipoConfig?.familias ?? {}) as Record<
       string,
       {
         label: string;
