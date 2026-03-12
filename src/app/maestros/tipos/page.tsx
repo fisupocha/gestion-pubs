@@ -3,6 +3,7 @@ import { crearTipo } from "@/modules/maestros/tipos/data/crear-tipo";
 import { listarTipos } from "@/modules/maestros/tipos/data/listar-tipos";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type TiposPageProps = {
   searchParams: Promise<{

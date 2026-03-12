@@ -3,6 +3,7 @@ import { crearConceptoGastoBancario } from "@/modules/maestros/conceptos-gastos-
 import { listarConceptosGastosBancarios } from "@/modules/maestros/conceptos-gastos-bancarios/data/listar-conceptos-gastos-bancarios";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type ConceptosGastosBancariosPageProps = {
   searchParams: Promise<{

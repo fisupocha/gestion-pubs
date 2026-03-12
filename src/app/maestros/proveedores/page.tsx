@@ -3,6 +3,7 @@ import { crearProveedor } from "@/modules/maestros/proveedores/data/crear-provee
 import { listarProveedores } from "@/modules/maestros/proveedores/data/listar-proveedores";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type ProveedoresPageProps = {
   searchParams: Promise<{

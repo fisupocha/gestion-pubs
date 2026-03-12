@@ -3,6 +3,7 @@ import { crearCliente } from "@/modules/maestros/clientes/data/crear-cliente";
 import { listarClientes } from "@/modules/maestros/clientes/data/listar-clientes";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type ClientesPageProps = {
   searchParams: Promise<{

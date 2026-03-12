@@ -3,6 +3,7 @@ import { crearBanco } from "@/modules/maestros/bancos/data/crear-banco";
 import { listarBancos } from "@/modules/maestros/bancos/data/listar-bancos";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type BancosPageProps = {
   searchParams: Promise<{

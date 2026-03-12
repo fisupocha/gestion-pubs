@@ -4,6 +4,7 @@ import { listarFamilias } from "@/modules/maestros/familias/data/listar-familias
 import { listarTipos } from "@/modules/maestros/tipos/data/listar-tipos";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type FamiliasPageProps = {
   searchParams: Promise<{

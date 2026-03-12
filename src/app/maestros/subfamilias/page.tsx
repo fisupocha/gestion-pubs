@@ -4,6 +4,7 @@ import { listarSubfamilias } from "@/modules/maestros/subfamilias/data/listar-su
 import { listarFamilias } from "@/modules/maestros/familias/data/listar-familias";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type SubfamiliasPageProps = {
   searchParams: Promise<{

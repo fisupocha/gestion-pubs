@@ -3,6 +3,7 @@ import { crearFormaPago } from "@/modules/maestros/formas-pago/data/crear-forma-
 import { listarFormasPago } from "@/modules/maestros/formas-pago/data/listar-formas-pago";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type FormasPagoPageProps = {
   searchParams: Promise<{

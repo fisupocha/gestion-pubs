@@ -3,6 +3,7 @@ import { crearTipoIva } from "@/modules/maestros/tipos-iva/data/crear-tipo-iva";
 import { listarTiposIva } from "@/modules/maestros/tipos-iva/data/listar-tipos-iva";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type TiposIvaPageProps = {
   searchParams: Promise<{
