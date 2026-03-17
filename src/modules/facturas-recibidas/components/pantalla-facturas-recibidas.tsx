@@ -1,91 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CampoFecha } from "@/components/ui/campo-fecha";
+import { leerFacturaAdjunta } from "@/lib/facturas/lector-adjunto";
+import type { ClasificacionMapa } from "@/lib/clasificacion";
+import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 
-const FECHA_PRUEBA = "2026-03-11";
-const EMPRESAS = ["EMPRESA", "PUB 1", "PUB 2", "PUB 3"];
-const PROVEEDORES = [
-  "JULPER ARANJUEZ, S.L.",
-  "DISTRIBUCIONES CENTRO",
-  "COCACOLA EUROPACIFIC",
-  "ASESORIA RIVERO",
-];
-const FORMAS_PAGO = ["TRANSFERENCIA", "PAGARE", "EFECTIVO", "RECIBO"];
-const BANCOS = ["CAIXABANK", "SANTANDER", "BBVA", "NINGUNO"];
+const PROVEEDORES_PREDETERMINADOS: string[] = [];
 
-const CLASIFICACION = {
-  mercaderia: {
-    label: "Mercaderia",
-    familias: {
-      refrescos: {
-        label: "Refrescos",
-        subfamilias: ["Coca-Cola", "Pepsi", "Fanta"],
-      },
-      cerveza: {
-        label: "Cerveza",
-        subfamilias: ["Barril", "Botellin", "Lata"],
-      },
-      tabaco: {
-        label: "Tabaco",
-        subfamilias: [],
-      },
-    },
-  },
-  fijos: {
-    label: "Fijos",
-    familias: {
-      asesoria: {
-        label: "Asesoria",
-        subfamilias: [],
-      },
-      suministros: {
-        label: "Suministros",
-        subfamilias: ["Luz", "Agua", "Gas"],
-      },
-    },
-  },
-  varios: {
-    label: "Varios",
-    familias: {
-      limpieza: {
-        label: "Limpieza",
-        subfamilias: ["Productos", "Utillaje"],
-      },
-      mantenimiento: {
-        label: "Mantenimiento",
-        subfamilias: [],
-      },
-    },
-  },
-  extras: {
-    label: "Extras",
-    familias: {
-      decoracion: {
-        label: "Decoracion",
-        subfamilias: [],
-      },
-      eventos: {
-        label: "Eventos",
-        subfamilias: [],
-      },
-    },
-  },
-  empleados: {
-    label: "Empleados",
-    familias: {
-      uniformes: {
-        label: "Uniformes",
-        subfamilias: [],
-      },
-      formacion: {
-        label: "Formacion",
-        subfamilias: [],
-      },
-    },
-  },
-} as const;
-
-type TipoClasificacion = keyof typeof CLASIFICACION;
+type TipoClasificacion = string;
 
 type FormularioFactura = {
   empresa: string;
@@ -125,7 +48,7 @@ function crearFormularioInicial(): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
-    fechaFactura: FECHA_PRUEBA,
+    fechaFactura: "",
     numeroFactura: "",
     tipo: "",
     familia: "",
@@ -136,22 +59,10 @@ function crearFormularioInicial(): FormularioFactura {
     base21: "",
     pagado: false,
     fechaPago: "",
-    formaPago: FORMAS_PAGO[0],
-    banco: BANCOS[0],
+    formaPago: "",
+    banco: "",
     numeroPagare: "",
     observaciones: "",
-  };
-}
-
-function crearRegistroPrueba(
-  id: number,
-  overrides: Partial<FormularioFactura>
-): RegistroFactura {
-  return {
-    id,
-    ...crearFormularioInicial(),
-    ...overrides,
-    adjunto: null,
   };
 }
 
@@ -194,39 +105,7 @@ function obtenerSiguienteId(registros: RegistroFactura[]) {
   return registros.length === 0 ? 1 : Math.max(...registros.map((registro) => registro.id)) + 1;
 }
 
-const REGISTROS_PRUEBA: RegistroFactura[] = [
-  crearRegistroPrueba(3842, {
-    empresa: "PUB 1",
-    proveedor: "COCACOLA EUROPACIFIC",
-    fechaFactura: "2026-02-27",
-    numeroFactura: "CC-102",
-    tipo: "mercaderia",
-    familia: "refrescos",
-    subfamilia: "Coca-Cola",
-    base21: "184,50",
-  }),
-  crearRegistroPrueba(3843, {
-    empresa: "EMPRESA",
-    proveedor: "ASESORIA RIVERO",
-    fechaFactura: "2026-03-05",
-    numeroFactura: "AR-031",
-    tipo: "fijos",
-    familia: "asesoria",
-    subfamilia: "",
-    base0: "0,00",
-    base21: "120,00",
-  }),
-  crearRegistroPrueba(3844, {
-    empresa: "EMPRESA",
-    proveedor: "JULPER ARANJUEZ, S.L.",
-    fechaFactura: FECHA_PRUEBA,
-    numeroFactura: "87",
-    tipo: "mercaderia",
-    familia: "refrescos",
-    subfamilia: "",
-    base21: "307,02",
-  }),
-];
+export const REGISTROS_PRUEBA: RegistroFactura[] = [];
 
 function round2(value: number) {
   return Math.round(value * 100) / 100;
@@ -262,6 +141,17 @@ function fmtMoney(value: number) {
 
 function normalizarTextoBusqueda(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function expandirVariantesFechaBusqueda(value: string) {
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!iso) {
+    return [value];
+  }
+
+  const [, year, month, day] = iso;
+  return [value, `${day}/${month}/${year}`, `${day}-${month}-${year}`];
 }
 
 function Bloque({
@@ -308,19 +198,39 @@ const inputClassName =
 const accionClassName =
   "min-w-[54px] rounded-2xl border border-[#d2baa0] bg-[linear-gradient(180deg,#fffaf2_0%,#eee1d0_100%)] px-3 py-2 text-center text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)] transition hover:border-[#b99569] hover:bg-[#fff7ed] 2xl:min-w-[60px] 2xl:py-2.5";
 
-export function PantallaFacturasRecibidas() {
+export function PantallaFacturasRecibidas({
+  proveedores = PROVEEDORES_PREDETERMINADOS,
+  clasificacion,
+  maestros,
+}: {
+  proveedores?: string[];
+  clasificacion?: ClasificacionMapa;
+  maestros?: MaestrosFormulario;
+}) {
+  const opcionesProveedor = proveedores;
+  const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
+  const opcionesLocal = maestros?.locales ?? [];
+  const opcionesFormaPago = maestros?.formasPago ?? [];
+  const opcionesBanco = maestros?.bancos ?? [];
+
+  type CampoResaltable =
+    | "fechaFactura"
+    | "numeroFactura"
+    | "base0"
+    | "base4"
+    | "base10"
+    | "base21"
+    | "fechaPago"
+    | "numeroPagare"
+    | "observaciones";
+
   const ultimoIndice = Math.max(REGISTROS_PRUEBA.length - 1, 0);
-  const registroInicial = REGISTROS_PRUEBA[ultimoIndice];
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
-  const [modoNuevo, setModoNuevo] = useState(false);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() =>
-    formularioDesdeRegistro(registroInicial)
-  );
-  const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(registroInicial.adjunto);
-  const [snapshotInicial, setSnapshotInicial] = useState(() =>
-    crearSnapshot(formularioDesdeRegistro(registroInicial), registroInicial.adjunto)
-  );
+  const [modoNuevo, setModoNuevo] = useState(true);
+  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
+  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -334,25 +244,51 @@ export function PantallaFacturasRecibidas() {
   const [textoBusqueda, setTextoBusqueda] = useState("");
   const [busquedaExacta, setBusquedaExacta] = useState(false);
   const [mensajeBusqueda, setMensajeBusqueda] = useState<string | null>(null);
+  const [leyendoAdjunto, setLeyendoAdjunto] = useState(false);
+  const [mensajeLecturaAdjunto, setMensajeLecturaAdjunto] = useState<string | null>(null);
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<number[]>([]);
+  const [indiceResultadoActual, setIndiceResultadoActual] = useState(-1);
+  const [resaltadoBusqueda, setResaltadoBusqueda] = useState<{
+    campo: CampoResaltable | null;
+    token: number;
+  }>({
+    campo: null,
+    token: 0,
+  });
   const inputAdjuntoRef = useRef<HTMLInputElement | null>(null);
+  const inputBusquedaRef = useRef<HTMLInputElement | null>(null);
+  const fechaFacturaRef = useRef<HTMLInputElement | null>(null);
+  const numeroFacturaRef = useRef<HTMLInputElement | null>(null);
+  const base0Ref = useRef<HTMLInputElement | null>(null);
+  const base4Ref = useRef<HTMLInputElement | null>(null);
+  const base10Ref = useRef<HTMLInputElement | null>(null);
+  const base21Ref = useRef<HTMLInputElement | null>(null);
+  const fechaPagoRef = useRef<HTMLInputElement | null>(null);
+  const numeroPagareRef = useRef<HTMLInputElement | null>(null);
+  const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
       return [];
     }
 
-    return Object.entries(CLASIFICACION[formulario.tipo].familias).map(([id, item]) => ({
+    const tipoConfig = clasificacionActiva[formulario.tipo];
+    if (!tipoConfig) {
+      return [];
+    }
+
+    return Object.entries(tipoConfig.familias).map(([id, item]) => ({
       id,
       label: item.label,
     }));
-  }, [formulario.tipo]);
+  }, [clasificacionActiva, formulario.tipo]);
 
   const subfamiliasDisponibles = useMemo(() => {
     if (!formulario.tipo || !formulario.familia) {
       return [];
     }
 
-    const familias = CLASIFICACION[formulario.tipo].familias as Record<
+    const familias = (clasificacionActiva[formulario.tipo]?.familias ?? {}) as Record<
       string,
       {
         label: string;
@@ -361,7 +297,7 @@ export function PantallaFacturasRecibidas() {
     >;
 
     return [...(familias[formulario.familia]?.subfamilias ?? [])];
-  }, [formulario.familia, formulario.tipo]);
+  }, [clasificacionActiva, formulario.familia, formulario.tipo]);
 
   const base0 = parseDecimal(formulario.base0);
   const base4 = parseDecimal(formulario.base4);
@@ -388,6 +324,48 @@ export function PantallaFacturasRecibidas() {
     Boolean(formulario.tipo) &&
     Boolean(formulario.familia) &&
     totalBase !== 0;
+
+  useEffect(() => {
+    if (!resaltadoBusqueda.campo || resaltadoBusqueda.token === 0) {
+      return;
+    }
+
+    const refs: Record<
+      CampoResaltable,
+      React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+    > = {
+      fechaFactura: fechaFacturaRef,
+      numeroFactura: numeroFacturaRef,
+      base0: base0Ref,
+      base4: base4Ref,
+      base10: base10Ref,
+      base21: base21Ref,
+      fechaPago: fechaPagoRef,
+      numeroPagare: numeroPagareRef,
+      observaciones: observacionesRef,
+    };
+
+    const objetivo = refs[resaltadoBusqueda.campo].current;
+
+    if (!objetivo) {
+      return;
+    }
+
+    objetivo.focus();
+
+    if ("select" in objetivo) {
+      objetivo.select();
+    }
+
+  }, [resaltadoBusqueda]);
+
+  useEffect(() => {
+    if (!buscadorAbierto) {
+      return;
+    }
+
+    inputBusquedaRef.current?.focus();
+  }, [buscadorAbierto]);
 
   function cambiarCampo<K extends keyof FormularioFactura>(
     campo: K,
@@ -489,7 +467,7 @@ export function PantallaFacturasRecibidas() {
     e.preventDefault();
 
     if (!formulario.empresa || !formulario.proveedor || !formulario.fechaFactura) {
-      window.alert("Completa Empresa, Proveedor y Fecha factura.");
+      window.alert("Completa Local, Proveedor y Fecha factura.");
       return;
     }
 
@@ -545,6 +523,8 @@ export function PantallaFacturasRecibidas() {
       return;
     }
 
+    setMensajeLecturaAdjunto(null);
+
     setArchivoAdjunto((prev) => {
       if (prev?.url) {
         URL.revokeObjectURL(prev.url);
@@ -583,9 +563,57 @@ export function PantallaFacturasRecibidas() {
     }
 
     setArchivoAdjunto(null);
+    setMensajeLecturaAdjunto(null);
 
     if (inputAdjuntoRef.current) {
       inputAdjuntoRef.current.value = "";
+    }
+  }
+
+  async function leerDatosAdjunto() {
+    if (!archivoAdjunto?.file) {
+      window.alert("Selecciona un adjunto antes de intentar leer la factura.");
+      return;
+    }
+
+    setLeyendoAdjunto(true);
+    setMensajeLecturaAdjunto(null);
+
+    try {
+      const resultado = await leerFacturaAdjunta(archivoAdjunto.file, {
+        proveedores: opcionesProveedor,
+        formasPago: opcionesFormaPago,
+        bancos: opcionesBanco,
+      });
+
+      if (!resultado.textoExtraido) {
+        setMensajeLecturaAdjunto(
+          resultado.advertencias[0] ??
+            "No se ha podido extraer texto del adjunto."
+        );
+        return;
+      }
+
+      setFormulario((prev) => ({
+        ...prev,
+        ...resultado.datos,
+      }));
+
+      const camposDetectados = Object.values(resultado.datos).filter(Boolean).length;
+      const resumen = [
+        camposDetectados > 0
+          ? `Se han rellenado ${camposDetectados} campo(s) automaticamente.`
+          : "Se ha leido el adjunto, pero no se han detectado campos utilizables.",
+        ...resultado.advertencias,
+      ].join(" ");
+
+      setMensajeLecturaAdjunto(resumen);
+    } catch {
+      setMensajeLecturaAdjunto(
+        "No se ha podido leer el adjunto en esta version. Prueba con un PDF que tenga texto."
+      );
+    } finally {
+      setLeyendoAdjunto(false);
     }
   }
 
@@ -681,7 +709,7 @@ export function PantallaFacturasRecibidas() {
   }
 
   function obtenerCamposBusqueda(registro: RegistroFactura) {
-    const tipoConfig = registro.tipo ? CLASIFICACION[registro.tipo] : null;
+    const tipoConfig = registro.tipo ? clasificacionActiva[registro.tipo] : null;
     const tipoLabel = tipoConfig?.label ?? "";
     const familias = (tipoConfig?.familias ?? {}) as Record<
       string,
@@ -710,7 +738,6 @@ export function PantallaFacturasRecibidas() {
       registro.empresa,
       registro.proveedor,
       registro.numeroFactura,
-      registro.fechaFactura,
       tipoLabel,
       familiaLabel,
       registro.subfamilia,
@@ -727,55 +754,131 @@ export function PantallaFacturasRecibidas() {
       registro.formaPago,
       registro.banco,
       registro.numeroPagare,
+      ...expandirVariantesFechaBusqueda(registro.fechaFactura),
     ]
       .filter(Boolean)
       .map((campo) => normalizarTextoBusqueda(campo));
   }
 
-  function buscarRegistro(irAlPrimero: boolean) {
-    const termino = normalizarTextoBusqueda(textoBusqueda);
+  function obtenerCampoResaltable(registro: RegistroFactura, termino: string): CampoResaltable | null {
+    const campos: Array<[CampoResaltable, string]> = [
+      ["numeroFactura", registro.numeroFactura],
+      ["fechaFactura", registro.fechaFactura],
+      ["base0", registro.base0],
+      ["base4", registro.base4],
+      ["base10", registro.base10],
+      ["base21", registro.base21],
+      ["fechaPago", registro.fechaPago],
+      ["numeroPagare", registro.numeroPagare],
+      ["observaciones", registro.observaciones],
+    ];
 
-    if (!termino) {
-      setMensajeBusqueda("Escribe algo para buscar.");
-      return;
-    }
+    const coincidencia = campos.find(([, valor]) => {
+      const normalizado = normalizarTextoBusqueda(valor);
+      return busquedaExacta ? normalizado === termino : normalizado.includes(termino);
+    });
 
-    if (registros.length === 0) {
-      setMensajeBusqueda("No hay registros guardados.");
-      return;
-    }
+    return coincidencia?.[0] ?? null;
+  }
 
-    const inicio = irAlPrimero || modoNuevo ? 0 : indiceActual + 1;
+  function reiniciarBusqueda() {
+    setResultadosBusqueda([]);
+    setIndiceResultadoActual(-1);
+    setMensajeBusqueda(null);
+    setResaltadoBusqueda({
+      campo: null,
+      token: 0,
+    });
+  }
 
-    for (let paso = 0; paso < registros.length; paso += 1) {
-      const indice = (inicio + paso) % registros.length;
-      const campos = obtenerCamposBusqueda(registros[indice]);
+  function obtenerCoincidencias(termino: string) {
+    return registros.reduce<number[]>((acc, registro, indice) => {
+      const campos = obtenerCamposBusqueda(registro);
       const coincide = campos.some((campo) =>
         busquedaExacta ? campo === termino : campo.includes(termino)
       );
 
       if (coincide) {
-        if (!modoNuevo && indice === indiceActual) {
-          setMensajeBusqueda(
-            irAlPrimero
-              ? "El registro actual ya es la primera coincidencia."
-              : "No hay una coincidencia siguiente distinta al registro actual."
-          );
-          return;
-        }
-
-        setMensajeBusqueda(null);
-        solicitarDestino(
-          { tipo: "registro", indice },
-          {
-            cerrarBuscador: true,
-          }
-        );
-        return;
+        acc.push(indice);
       }
+
+      return acc;
+    }, []);
+  }
+
+  function buscarDesdeInicio() {
+    const termino = normalizarTextoBusqueda(textoBusqueda);
+
+    if (!termino) {
+      reiniciarBusqueda();
+      setMensajeBusqueda("Escribe algo para buscar.");
+      return;
     }
 
-    setMensajeBusqueda("No se han encontrado resultados.");
+    if (registros.length === 0) {
+      reiniciarBusqueda();
+      setMensajeBusqueda("No hay registros guardados.");
+      return;
+    }
+
+    const coincidencias = obtenerCoincidencias(termino);
+
+    if (coincidencias.length === 0) {
+      reiniciarBusqueda();
+      setMensajeBusqueda("No se han encontrado resultados.");
+      return;
+    }
+
+    setResultadosBusqueda(coincidencias);
+    setIndiceResultadoActual(0);
+    setResaltadoBusqueda((prev) => ({
+      campo: obtenerCampoResaltable(registros[coincidencias[0]], termino),
+      token: prev.token + 1,
+    }));
+    solicitarDestino({ tipo: "registro", indice: coincidencias[0] });
+    setMensajeBusqueda(`1 de ${coincidencias.length}`);
+  }
+
+  function buscarMas() {
+    const termino = normalizarTextoBusqueda(textoBusqueda);
+
+    if (resultadosBusqueda.length === 0 || indiceResultadoActual < 0) {
+      buscarDesdeInicio();
+      return;
+    }
+
+    if (indiceResultadoActual >= resultadosBusqueda.length - 1) {
+      setMensajeBusqueda('Ya no hay mas coincidencias. Puedes ir al primero o cerrar.');
+      return;
+    }
+
+    const siguienteResultado = indiceResultadoActual + 1;
+    setIndiceResultadoActual(siguienteResultado);
+    setResaltadoBusqueda((prev) => ({
+      campo: obtenerCampoResaltable(registros[resultadosBusqueda[siguienteResultado]], termino),
+      token: prev.token + 1,
+    }));
+    solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[siguienteResultado] });
+    setMensajeBusqueda(
+      `${siguienteResultado + 1} de ${resultadosBusqueda.length}`
+    );
+  }
+
+  function irPrimeraCoincidencia() {
+    const termino = normalizarTextoBusqueda(textoBusqueda);
+
+    if (resultadosBusqueda.length === 0) {
+      buscarDesdeInicio();
+      return;
+    }
+
+    setIndiceResultadoActual(0);
+    setResaltadoBusqueda((prev) => ({
+      campo: obtenerCampoResaltable(registros[resultadosBusqueda[0]], termino),
+      token: prev.token + 1,
+    }));
+    solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
+    setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
   }
 
   return (
@@ -789,7 +892,7 @@ export function PantallaFacturasRecibidas() {
           </h1>
         </div>
 
-        <div className="rounded-2xl border border-[#d2b391] bg-[linear-gradient(180deg,#f7ede1_0%,#e9dac7_100%)] px-2 py-0.75 text-right shadow-[0_10px_18px_rgba(74,54,39,0.08)] 2xl:px-2.5 2xl:py-1">
+        <div className="rounded-2xl border border-[#d2b391] bg-[linear-gradient(180deg,#f7ede1_0%,#e9dac7_100%)] px-2 py-0.75 text-center shadow-[0_10px_18px_rgba(74,54,39,0.08)] 2xl:px-2.5 2xl:py-1">
           <div className="text-[8px] font-black uppercase tracking-[0.2em] text-[#8b6d52]">
             ID
           </div>
@@ -798,17 +901,17 @@ export function PantallaFacturasRecibidas() {
       </header>
 
       <form onSubmit={guardarPrueba} className="grid min-h-0 flex-1 gap-2.5 lg:grid-cols-[1.55fr_0.95fr] 2xl:gap-3">
-        <div className="grid min-h-0 gap-2.5 2xl:gap-3">
+        <div className="relative grid min-h-0 gap-2.5 2xl:gap-3">
           <Bloque titulo="Datos principales">
             <div className="grid gap-2.5 lg:grid-cols-[126px_minmax(0,1fr)_144px_144px] 2xl:gap-3 2xl:grid-cols-[140px_minmax(0,1fr)_150px_150px]">
-              <Campo label="Empresa">
+              <Campo label="Local">
                 <select
                   value={formulario.empresa}
                   onChange={(e) => cambiarCampo("empresa", e.target.value)}
                   className={inputClassName}
                 >
-                  <option value="">Selecciona empresa</option>
-                  {EMPRESAS.map((item) => (
+                  <option value="">Selecciona local</option>
+                  {opcionesLocal.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -823,7 +926,7 @@ export function PantallaFacturasRecibidas() {
                   className={inputClassName}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {PROVEEDORES.map((item) => (
+                  {opcionesProveedor.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -831,17 +934,18 @@ export function PantallaFacturasRecibidas() {
                 </select>
               </Campo>
 
-              <Campo label="Fecha factura">
-                <input
+              <Campo label="Fecha">
+                <CampoFecha
+                  ref={fechaFacturaRef}
                   value={formulario.fechaFactura}
                   onChange={(e) => cambiarCampo("fechaFactura", e.target.value)}
-                  type="date"
                   className={`${inputClassName} text-center`}
                 />
               </Campo>
 
               <Campo label="Numero factura">
                 <input
+                  ref={numeroFacturaRef}
                   value={formulario.numeroFactura}
                   onChange={(e) => cambiarCampo("numeroFactura", e.target.value)}
                   type="text"
@@ -872,11 +976,11 @@ export function PantallaFacturasRecibidas() {
                   className={inputClassName}
                 >
                   <option value="">Selecciona tipo</option>
-                  {Object.entries(CLASIFICACION).map(([id, item]) => (
-                    <option key={id} value={id}>
-                      {item.label}
-                    </option>
-                  ))}
+                    {Object.entries(clasificacionActiva).map(([id, item]) => (
+                      <option key={id} value={id}>
+                        {item.label}
+                      </option>
+                    ))}
                 </select>
               </Campo>
 
@@ -924,6 +1028,7 @@ export function PantallaFacturasRecibidas() {
             <div className="grid gap-2 lg:grid-cols-4 2xl:gap-2.5">
               <Campo label="Base IVA 0%">
                 <input
+                  ref={base0Ref}
                   value={formulario.base0}
                   onChange={(e) => cambiarImporte("base0", e.target.value)}
                   type="text"
@@ -935,6 +1040,7 @@ export function PantallaFacturasRecibidas() {
 
               <Campo label="Base IVA 4%">
                 <input
+                  ref={base4Ref}
                   value={formulario.base4}
                   onChange={(e) => cambiarImporte("base4", e.target.value)}
                   type="text"
@@ -946,6 +1052,7 @@ export function PantallaFacturasRecibidas() {
 
               <Campo label="Base IVA 10%">
                 <input
+                  ref={base10Ref}
                   value={formulario.base10}
                   onChange={(e) => cambiarImporte("base10", e.target.value)}
                   type="text"
@@ -957,6 +1064,7 @@ export function PantallaFacturasRecibidas() {
 
               <Campo label="Base IVA 21%">
                 <input
+                  ref={base21Ref}
                   value={formulario.base21}
                   onChange={(e) => cambiarImporte("base21", e.target.value)}
                   type="text"
@@ -1041,10 +1149,12 @@ export function PantallaFacturasRecibidas() {
                 <button
                   type="button"
                   onClick={() => {
-                    setMensajeBusqueda(null);
+                    setTextoBusqueda("");
+                    setBusquedaExacta(false);
+                    reiniciarBusqueda();
                     setBuscadorAbierto(true);
                   }}
-                  className={accionClassName}
+                  className={`${accionClassName} text-[15px]`}
                 >
                   Buscar
                 </button>
@@ -1056,10 +1166,10 @@ export function PantallaFacturasRecibidas() {
                   disabled={botonGuardado || !formularioValido}
                   className={
                     botonGuardado
-                      ? "min-w-[124px] rounded-2xl border border-[#8fb68a] bg-[linear-gradient(180deg,#dcefd7_0%,#b9d7b2_100%)] px-4 py-2 text-sm font-semibold text-[#264823] shadow-[0_12px_20px_rgba(63,107,56,0.14)] 2xl:min-w-[136px] 2xl:py-2.5"
+                      ? "min-w-[124px] rounded-2xl border border-[#8fb68a] bg-[linear-gradient(180deg,#dcefd7_0%,#b9d7b2_100%)] px-4 py-2 text-[15px] font-semibold text-[#264823] shadow-[0_12px_20px_rgba(63,107,56,0.14)] 2xl:min-w-[136px] 2xl:py-2.5"
                       : !formularioValido
-                        ? "min-w-[124px] rounded-2xl border border-[#c18c89] bg-[linear-gradient(180deg,#f2dddd_0%,#debbb8_100%)] px-4 py-2 text-sm font-semibold text-[#6d2d2a] shadow-[0_12px_20px_rgba(128,71,67,0.12)] 2xl:min-w-[136px] 2xl:py-2.5"
-                        : "min-w-[124px] rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_12px_20px_rgba(74,54,39,0.09)] transition hover:bg-[#fff4e4] 2xl:min-w-[136px] 2xl:py-2.5"
+                        ? "min-w-[124px] rounded-2xl border border-[#c18c89] bg-[linear-gradient(180deg,#f2dddd_0%,#debbb8_100%)] px-4 py-2 text-[15px] font-semibold text-[#6d2d2a] shadow-[0_12px_20px_rgba(128,71,67,0.12)] 2xl:min-w-[136px] 2xl:py-2.5"
+                        : "min-w-[124px] rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-[15px] font-semibold text-[#2a201c] shadow-[0_12px_20px_rgba(74,54,39,0.09)] transition hover:bg-[#fff4e4] 2xl:min-w-[136px] 2xl:py-2.5"
                   }
                 >
                   {botonGuardado ? "Guardado" : "Guardar"}
@@ -1069,7 +1179,7 @@ export function PantallaFacturasRecibidas() {
           </Bloque>
         </div>
 
-        <div className="grid min-h-0 gap-2.5 2xl:gap-3">
+        <div className="relative grid min-h-0 gap-2.5 2xl:gap-3">
           <Bloque titulo="Pago">
             <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr] 2xl:gap-3">
               <button
@@ -1077,8 +1187,8 @@ export function PantallaFacturasRecibidas() {
                 onClick={() => cambiarCampo("pagado", true)}
                 className={
                   formulario.pagado
-                    ? "rounded-2xl border border-[#8fb68a] bg-[linear-gradient(180deg,#dcefd7_0%,#b9d7b2_100%)] px-4 py-2.5 text-sm font-black text-[#264823] shadow-[0_12px_20px_rgba(63,107,56,0.14)] 2xl:py-3"
-                    : "rounded-2xl border border-[#d3bea4] bg-[linear-gradient(180deg,#fffaf2_0%,#eee3d3_100%)] px-4 py-2.5 text-sm font-black text-[#6b5b50] shadow-[0_10px_18px_rgba(74,54,39,0.07)] 2xl:py-3"
+                    ? "rounded-2xl border border-[#8fb68a] bg-[linear-gradient(180deg,#dcefd7_0%,#b9d7b2_100%)] px-4 py-2 text-sm font-black text-[#264823] shadow-[0_12px_20px_rgba(63,107,56,0.14)] 2xl:py-2.5"
+                    : "rounded-2xl border border-[#d3bea4] bg-[linear-gradient(180deg,#fffaf2_0%,#eee3d3_100%)] px-4 py-2 text-sm font-black text-[#6b5b50] shadow-[0_10px_18px_rgba(74,54,39,0.07)] 2xl:py-2.5"
                 }
               >
                 Pagado
@@ -1089,21 +1199,21 @@ export function PantallaFacturasRecibidas() {
                 onClick={() => cambiarCampo("pagado", false)}
                 className={
                   !formulario.pagado
-                    ? "rounded-2xl border border-[#c18c89] bg-[linear-gradient(180deg,#f2dddd_0%,#debbb8_100%)] px-4 py-2.5 text-sm font-black text-[#6d2d2a] shadow-[0_12px_22px_rgba(128,71,67,0.14)] 2xl:py-3"
-                    : "rounded-2xl border border-[#d3bea4] bg-[linear-gradient(180deg,#fffaf2_0%,#eee3d3_100%)] px-4 py-2.5 text-sm font-black text-[#6b5b50] shadow-[0_10px_18px_rgba(74,54,39,0.07)] 2xl:py-3"
+                    ? "rounded-2xl border border-[#c18c89] bg-[linear-gradient(180deg,#f2dddd_0%,#debbb8_100%)] px-4 py-2 text-sm font-black text-[#6d2d2a] shadow-[0_12px_22px_rgba(128,71,67,0.14)] 2xl:py-2.5"
+                    : "rounded-2xl border border-[#d3bea4] bg-[linear-gradient(180deg,#fffaf2_0%,#eee3d3_100%)] px-4 py-2 text-sm font-black text-[#6b5b50] shadow-[0_10px_18px_rgba(74,54,39,0.07)] 2xl:py-2.5"
                 }
               >
                 No pagado
               </button>
             </div>
 
-            <div className="mt-2.5 grid gap-2.5 2xl:mt-3 2xl:gap-3">
-              <Campo label="Fecha de pago">
-                <input
+            <div className="mt-2 grid gap-2 2xl:mt-2.5 2xl:gap-2.5">
+              <Campo label="Fecha">
+                <CampoFecha
+                  ref={fechaPagoRef}
                   value={formulario.fechaPago}
                   onChange={(e) => cambiarCampo("fechaPago", e.target.value)}
-                  type="date"
-                  className={inputClassName}
+                  className={`${inputClassName} text-center`}
                 />
               </Campo>
 
@@ -1113,7 +1223,8 @@ export function PantallaFacturasRecibidas() {
                   onChange={(e) => cambiarCampo("formaPago", e.target.value)}
                   className={inputClassName}
                 >
-                  {FORMAS_PAGO.map((item) => (
+                  <option value="">Forma de pago</option>
+                  {opcionesFormaPago.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -1127,7 +1238,8 @@ export function PantallaFacturasRecibidas() {
                   onChange={(e) => cambiarCampo("banco", e.target.value)}
                   className={inputClassName}
                 >
-                  {BANCOS.map((item) => (
+                  <option value="">Banco</option>
+                  {opcionesBanco.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -1135,8 +1247,9 @@ export function PantallaFacturasRecibidas() {
                 </select>
               </Campo>
 
-              <Campo label="Numero pagare">
+              <Campo label="Numero de pagare">
                 <input
+                  ref={numeroPagareRef}
                   value={formulario.numeroPagare}
                   onChange={(e) => cambiarCampo("numeroPagare", e.target.value)}
                   type="text"
@@ -1146,14 +1259,15 @@ export function PantallaFacturasRecibidas() {
 
               <Campo label="Observaciones">
                 <textarea
+                  ref={observacionesRef}
                   value={formulario.observaciones}
                   onChange={(e) => cambiarCampo("observaciones", e.target.value)}
                   rows={3}
-                  className={`${inputClassName} h-16 resize-none 2xl:h-24`}
+                  className={`${inputClassName} h-14 resize-none 2xl:h-20`}
                 />
               </Campo>
 
-              <div className="rounded-2xl border border-[#d2b391] bg-[linear-gradient(180deg,#f5ecdf_0%,#e8dac7_100%)] px-3 py-2.5 shadow-[0_10px_18px_rgba(72,53,39,0.06)]">
+              <div className="rounded-2xl border border-[#d2b391] bg-[linear-gradient(180deg,#f5ecdf_0%,#e8dac7_100%)] px-3 py-2 shadow-[0_10px_18px_rgba(72,53,39,0.06)]">
                 <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#8b6e52]">
                   Adjunto
                 </div>
@@ -1190,6 +1304,15 @@ export function PantallaFacturasRecibidas() {
 
                   <button
                     type="button"
+                    onClick={leerDatosAdjunto}
+                    disabled={!archivoAdjunto || leyendoAdjunto}
+                    className="rounded-xl border border-[#d2baa0] bg-[linear-gradient(180deg,#fffaf2_0%,#eee1d0_100%)] px-3 py-1.5 text-[11px] font-semibold text-[#2a201c] shadow-[0_8px_14px_rgba(74,54,39,0.08)] transition hover:bg-[#fff7ed] disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    {leyendoAdjunto ? "Leyendo..." : "Leer factura"}
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={quitarAdjunto}
                     disabled={!archivoAdjunto}
                     className="rounded-xl border border-[#d2baa0] bg-[linear-gradient(180deg,#fffaf2_0%,#eee1d0_100%)] px-3 py-1.5 text-[11px] font-semibold text-[#2a201c] shadow-[0_8px_14px_rgba(74,54,39,0.08)] transition hover:bg-[#fff7ed] disabled:cursor-not-allowed disabled:opacity-55"
@@ -1197,9 +1320,104 @@ export function PantallaFacturasRecibidas() {
                     Quitar
                   </button>
                 </div>
+
+                {mensajeLecturaAdjunto ? (
+                  <div className="mt-2 rounded-2xl border border-[#d2baa0] bg-[rgba(255,250,242,0.92)] px-3 py-2 text-center text-[11px] font-medium text-[#5f5144]">
+                    {mensajeLecturaAdjunto}
+                  </div>
+                ) : null}
               </div>
             </div>
           </Bloque>
+
+          {buscadorAbierto ? (
+            <div className="absolute left-1/2 top-[356px] z-40 w-[320px] -translate-x-1/2">
+              <div className="rounded-[24px] border border-[#584334] bg-[linear-gradient(180deg,#30241d_0%,#231914_48%,#1a1310_100%)] p-5 shadow-[0_24px_56px_rgba(24,16,12,0.28)]">
+                <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#c7ae8d]">
+                  Buscar
+                </div>
+
+                <div className="mt-2 grid gap-3">
+                  <label className="grid gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#c7ae8d]">
+                      Texto
+                    </span>
+                    <input
+                      ref={inputBusquedaRef}
+                      value={textoBusqueda}
+                      onChange={(e) => {
+                        setTextoBusqueda(e.target.value);
+                        reiniciarBusqueda();
+                      }}
+                      type="text"
+                      className="w-full rounded-2xl border border-[#d8c2a5] bg-[linear-gradient(180deg,#fffaf4_0%,#f4eadf_100%)] px-3 py-2 text-sm text-[#241b17] shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] outline-none"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-center gap-2 text-sm font-medium text-[#f3e6d7]">
+                    <input
+                      checked={busquedaExacta}
+                      onChange={(e) => {
+                        setBusquedaExacta(e.target.checked);
+                        reiniciarBusqueda();
+                      }}
+                      type="checkbox"
+                    />
+                    Coincidencia exacta
+                  </label>
+
+                  {mensajeBusqueda ? (
+                    <div className="rounded-2xl border border-[#6a5140] bg-[rgba(255,250,242,0.9)] px-3 py-2 text-center text-sm text-[#4e3c31]">
+                      {mensajeBusqueda}
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-2">
+                    <button
+                      type="button"
+                      onClick={buscarDesdeInicio}
+                      className="rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
+                    >
+                      Buscar
+                    </button>
+
+                    {resultadosBusqueda.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={buscarMas}
+                          className="rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
+                        >
+                          Buscar mas
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={irPrimeraCoincidencia}
+                          className="rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
+                        >
+                          Ir al primero
+                        </button>
+                      </>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTextoBusqueda("");
+                        setBusquedaExacta(false);
+                        reiniciarBusqueda();
+                        setBuscadorAbierto(false);
+                      }}
+                      className="rounded-2xl border border-[#5e4638] bg-[linear-gradient(180deg,#3a2b23_0%,#2b2019_100%)] px-4 py-2 text-sm font-semibold text-[#f3e6d7] shadow-[0_8px_16px_rgba(14,10,8,0.18)]"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
         </div>
       </form>
@@ -1234,68 +1452,7 @@ export function PantallaFacturasRecibidas() {
         </div>
       ) : null}
 
-      {buscadorAbierto ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(22,16,12,0.28)] p-4">
-          <div className="w-full max-w-xl rounded-[24px] border border-[#d2b391] bg-[linear-gradient(180deg,#f7ede1_0%,#eadcc9_100%)] p-5 shadow-[0_24px_56px_rgba(28,20,15,0.22)]">
-            <div className="text-lg font-black text-[#211915]">Buscar en facturas recibidas</div>
-
-            <div className="mt-4 grid gap-3">
-              <label className="grid gap-1.5">
-                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8a715a]">
-                  Buscar
-                </span>
-                <input
-                  value={textoBusqueda}
-                  onChange={(e) => setTextoBusqueda(e.target.value)}
-                  type="text"
-                  className="w-full rounded-2xl border border-[#d8c2a5] bg-[linear-gradient(180deg,#fffaf4_0%,#f4eadf_100%)] px-3 py-2 text-sm text-[#241b17] shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] outline-none"
-                />
-              </label>
-
-              <label className="flex items-center justify-center gap-2 text-sm font-medium text-[#5f5144]">
-                <input
-                  checked={busquedaExacta}
-                  onChange={(e) => setBusquedaExacta(e.target.checked)}
-                  type="checkbox"
-                />
-                Coincidencia exacta
-              </label>
-
-              {mensajeBusqueda ? (
-                <div className="rounded-2xl border border-[#d2b391] bg-white/55 px-3 py-2 text-center text-sm text-[#6a5647]">
-                  {mensajeBusqueda}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => buscarRegistro(false)}
-                className="rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
-              >
-                Buscar siguiente
-              </button>
-
-              <button
-                type="button"
-                onClick={() => buscarRegistro(true)}
-                className="rounded-2xl border border-[#ceb08b] bg-[linear-gradient(180deg,#fff6e8_0%,#ecd8be_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
-              >
-                Ir al primero
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBuscadorAbierto(false)}
-                className="rounded-2xl border border-[#d2baa0] bg-[linear-gradient(180deg,#fffaf2_0%,#eee1d0_100%)] px-4 py-2 text-sm font-semibold text-[#2a201c] shadow-[0_10px_18px_rgba(74,54,39,0.08)]"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
+

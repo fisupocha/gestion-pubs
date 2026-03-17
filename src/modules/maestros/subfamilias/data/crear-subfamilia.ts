@@ -10,7 +10,7 @@ export async function crearSubfamilia(formData: FormData) {
   const familiaId = Number(familiaIdTexto);
 
   if (!nombre || !familiaIdTexto || Number.isNaN(familiaId)) {
-    redirect("/maestros/subfamilias?tipo=error&mensaje=Completa%20nombre%20y%20familia");
+    redirect("/maestros/clasificacion?tipo=error&mensaje=Completa%20nombre%20y%20familia");
   }
 
   const { error } = await supabase.from("subfamilias").insert({
@@ -20,12 +20,12 @@ export async function crearSubfamilia(formData: FormData) {
 
   if (error) {
     if (error.code === "23505") {
-      redirect("/maestros/subfamilias?tipo=error&mensaje=Ya%20existe%20una%20subfamilia%20con%20ese%20nombre%20en%20esa%20familia");
+      redirect("/maestros/clasificacion?tipo=error&mensaje=Ya%20existe%20una%20subfamilia%20con%20ese%20nombre%20en%20esa%20familia");
     }
 
-    redirect("/maestros/subfamilias?tipo=error&mensaje=No%20se%20pudo%20guardar%20la%20subfamilia");
+    redirect("/maestros/clasificacion?tipo=error&mensaje=No%20se%20pudo%20guardar%20la%20subfamilia");
   }
 
-  revalidatePath("/maestros/subfamilias");
-  redirect("/maestros/subfamilias?tipo=ok&mensaje=Subfamilia%20guardada%20correctamente");
+  revalidatePath("/maestros/clasificacion");
+  redirect("/maestros/clasificacion?tipo=ok&mensaje=Subfamilia%20guardada%20correctamente");
 }

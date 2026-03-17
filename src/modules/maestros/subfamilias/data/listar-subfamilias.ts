@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 export async function listarSubfamilias() {
   const { data, error } = await supabase
     .from("subfamilias")
-    .select("id, nombre, familias(nombre, tipos(nombre))")
+    .select("id, nombre, familia_id, familias(id, nombre, tipo_id, tipos(id, nombre))")
     .order("id", { ascending: true });
 
   if (error) {
@@ -22,7 +22,9 @@ export async function listarSubfamilias() {
     return {
       id: item.id,
       nombre: item.nombre,
+      familiaId: familiaData?.id ?? 0,
       familia: familiaData?.nombre ?? "",
+      tipoId: tipoData?.id ?? 0,
       tipo: tipoData?.nombre ?? "",
     };
   });

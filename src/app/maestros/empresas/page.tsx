@@ -1,8 +1,8 @@
-﻿import { PantallaEmpresas } from "@/modules/maestros/empresas/components/pantalla-empresas";
-import { listarEmpresas } from "@/modules/maestros/empresas/data/listar-empresas";
+import { redirect } from "next/navigation";
 
-export default async function EmpresasPage() {
-  const empresas = await listarEmpresas();
+export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
-  return <PantallaEmpresas empresas={empresas} />;
+export default function EmpresasPage() {
+  redirect("/maestros/varios");
 }

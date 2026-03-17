@@ -7,7 +7,7 @@ export async function listarEmpresas() {
     .order("id", { ascending: true });
 
   if (error) {
-    throw new Error("No se pudieron cargar las empresas");
+    throw new Error("No se pudieron cargar los locales");
   }
 
   return data;

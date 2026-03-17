@@ -9,7 +9,7 @@ const tarjetas = [
   },
   {
     titulo: "Maestros",
-    texto: "Listas base para mantener empresas, clasificaciones y relaciones.",
+    texto: "Listas base para mantener locales, Tipos/Fam/Sub y relaciones.",
     href: "/maestros/empresas",
     cta: "Abrir maestros",
   },

@@ -7,25 +7,16 @@ export const itemsOperativa = [
   { href: "/gastos-bancarios", label: "Gastos bancarios" },
   { href: "/creditos", label: "Créditos" },
   { href: "/impuestos", label: "Impuestos" },
-  { href: "/personal", label: "Empleados" },
+  { href: "/personal", label: "Personal" },
   { href: "/facturas-emitidas", label: "Facturas emitidas" },
   { href: "/caja", label: "Caja" },
 ];
 
 export const itemsMaestros = [
-  { href: "/maestros/empresas", label: "Empresas" },
-  { href: "/maestros/tipos", label: "Tipos" },
-  { href: "/maestros/familias", label: "Familias" },
-  { href: "/maestros/subfamilias", label: "Subfamilias" },
+  { href: "/maestros/clasificacion", label: "Tipos/Fam/Sub" },
   { href: "/maestros/proveedores", label: "Proveedores" },
   { href: "/maestros/clientes", label: "Clientes" },
-  { href: "/maestros/bancos", label: "Bancos" },
-  { href: "/maestros/formas-pago", label: "Formas de pago" },
-  { href: "/maestros/tipos-iva", label: "Tipos de IVA" },
-  {
-    href: "/maestros/conceptos-gastos-bancarios",
-    label: "Gastos bancarios",
-  },
+  { href: "/maestros/varios", label: "Maestros varios" },
 ];
 
 export const itemConsultas = { href: "/consultas", label: "Consultas" };

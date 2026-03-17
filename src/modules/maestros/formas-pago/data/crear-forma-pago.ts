@@ -8,7 +8,7 @@ export async function crearFormaPago(formData: FormData) {
   const nombre = formData.get("nombre")?.toString().trim() ?? "";
 
   if (!nombre) {
-    redirect("/maestros/formas-pago?tipo=error&mensaje=Completa%20el%20nombre%20de%20la%20forma%20de%20pago");
+    redirect("/maestros/varios?tipo=error&mensaje=Completa%20el%20nombre%20de%20la%20forma%20de%20pago");
   }
 
   const { error } = await supabase.from("formas_pago").insert({
@@ -17,12 +17,12 @@ export async function crearFormaPago(formData: FormData) {
 
   if (error) {
     if (error.code === "23505") {
-      redirect("/maestros/formas-pago?tipo=error&mensaje=Ya%20existe%20esa%20forma%20de%20pago");
+      redirect("/maestros/varios?tipo=error&mensaje=Ya%20existe%20esa%20forma%20de%20pago");
     }
 
-    redirect("/maestros/formas-pago?tipo=error&mensaje=No%20se%20pudo%20guardar%20la%20forma%20de%20pago");
+    redirect("/maestros/varios?tipo=error&mensaje=No%20se%20pudo%20guardar%20la%20forma%20de%20pago");
   }
 
-  revalidatePath("/maestros/formas-pago");
-  redirect("/maestros/formas-pago?tipo=ok&mensaje=Forma%20de%20pago%20guardada%20correctamente");
+  revalidatePath("/maestros/varios");
+  redirect("/maestros/varios?tipo=ok&mensaje=Forma%20de%20pago%20guardada%20correctamente");
 }

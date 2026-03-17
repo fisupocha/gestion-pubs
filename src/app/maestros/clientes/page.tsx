@@ -1,5 +1,7 @@
-﻿import { PantallaClientes } from "@/modules/maestros/clientes/components/pantalla-clientes";
+import { PantallaClientes } from "@/modules/maestros/clientes/components/pantalla-clientes";
+import { actualizarCliente } from "@/modules/maestros/clientes/data/actualizar-cliente";
 import { crearCliente } from "@/modules/maestros/clientes/data/crear-cliente";
+import { eliminarCliente } from "@/modules/maestros/clientes/data/eliminar-cliente";
 import { listarClientes } from "@/modules/maestros/clientes/data/listar-clientes";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +26,8 @@ export default async function ClientesPage({
       mensaje={params.mensaje}
       tipo={params.tipo}
       accionCrear={crearCliente}
+      accionActualizar={actualizarCliente}
+      accionEliminar={eliminarCliente}
     />
   );
 }
