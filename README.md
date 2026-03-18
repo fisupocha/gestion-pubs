@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# gestion-pubs
 
-## Getting Started
+Aplicacion Next.js para gestion operativa, maestros y consultas del grupo.
 
-First, run the development server:
+Estado de referencia: 18/03/2026
+
+## Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Supabase
+- Tesseract.js para lectura de facturas
+
+## Modulos principales
+
+- Operativa:
+  `Facturas recibidas`, `Facturas emitidas`, `Alquileres`, `Gastos bancarios`, `Creditos`, `Impuestos`, `Personal`, `Caja`, `Notas varias`
+- Maestros:
+  `Tipos/Fam/Sub`, `Proveedores`, `Clientes`, `Maestros varios`
+- Consultas:
+  vista principal `/consultas` y detalle `/consultas/detalle`
+
+## Persistencia
+
+- Maestros persistidos en Supabase
+- Operativa persistida en tablas `operativa_*`
+- Consultas leen operativa real desde BBDD, sin arrays de prueba
+
+Archivo clave de operativa:
+
+- `src/modules/operativa/utils/persistencia-operativa.ts`
+
+Archivos clave de consultas:
+
+- `src/modules/consultas/utils/cargar-operativa-consultas.ts`
+- `src/modules/consultas/utils/motor-consultas.ts`
+- `src/modules/consultas/utils/estado-consultas.ts`
+
+## Variables de entorno
+
+La aplicacion necesita estas variables publicas para crear el cliente de Supabase:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Si faltan, la app lanza error al inicializar `src/lib/supabase.ts`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Arranque local
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+## Validacion recomendada
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run verify
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Equivale a:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
 
-## Deploy on Vercel
+## SQL base de operativa
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Estos scripts son la base si hay que reconstruir la parte operativa en Supabase:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `sql/crear-operativa-formularios.sql`
+- `sql/activar-operativa-formularios.sql`
+
+## Regla clave de consultas
+
+- `Caja` es el ingreso base real
+- `Facturas emitidas` de `Caja` no duplican ingresos
+- El resto de `Facturas emitidas` compensa gasto en su misma clasificacion
+- `Riverocio` se trata como `Empresa`
+- Sin filtro de locales: `Riverocio` aparece como bloque propio
+- Con locales operativos seleccionados: los gastos de `Riverocio` se reparten por caja entre los locales elegidos
+
+## Checklist rapido de deploy
+
+1. Confirmar que la rama a desplegar contiene los cambios validados.
+2. Configurar en el proveedor de hosting las variables:
+   `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+3. Verificar que en Supabase ya estan ejecutados:
+   `sql/crear-operativa-formularios.sql` y `sql/activar-operativa-formularios.sql`.
+4. Ejecutar `npm run verify`.
+5. Desplegar.
+
+## Rutas principales
+
+- `/facturas-recibidas`
+- `/facturas-emitidas`
+- `/alquileres`
+- `/gastos-bancarios`
+- `/creditos`
+- `/impuestos`
+- `/personal`
+- `/caja`
+- `/notas-varias`
+- `/consultas`
+- `/consultas/detalle`
+- `/maestros/proveedores`
+- `/maestros/clientes`
+- `/maestros/clasificacion`
+- `/maestros/varios`

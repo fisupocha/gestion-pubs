@@ -4,7 +4,7 @@ export async function listarFormasPago() {
   const { data, error } = await supabase
     .from("formas_pago")
     .select("id, nombre")
-    .order("id", { ascending: true });
+    .order("nombre", { ascending: true });
 
   if (error) {
     throw new Error("No se pudieron cargar las formas de pago");

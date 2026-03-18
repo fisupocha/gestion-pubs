@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
-import { calcularConsulta } from "@/modules/consultas/utils/motor-consultas";
+import {
+  calcularConsulta,
+  OPERATIVA_CONSULTA_VACIA,
+} from "@/modules/consultas/utils/motor-consultas";
+import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
 
@@ -44,14 +48,38 @@ export function PantallaConsultasDetalle({
   maestros,
   initialState,
 }: PantallaConsultasDetalleProps) {
+  const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const cargar = async () => {
+      try {
+        const data = await cargarOperativaConsultas(clasificacion);
+        if (!cancelado) {
+          setOperativa(data);
+        }
+      } catch (error) {
+        console.error("No se pudo cargar la operativa para el detalle de consultas", error);
+      }
+    };
+
+    void cargar();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [clasificacion]);
+
   const resultado = useMemo(
     () =>
       calcularConsulta({
         clasificacion,
         maestros,
+        operativa,
         state: initialState,
       }),
-    [clasificacion, maestros, initialState]
+    [clasificacion, maestros, operativa, initialState]
   );
 
   const volverHref = useMemo(() => {

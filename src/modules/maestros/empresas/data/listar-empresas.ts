@@ -4,7 +4,7 @@ export async function listarEmpresas() {
   const { data, error } = await supabase
     .from("empresas")
     .select("id, nombre")
-    .order("id", { ascending: true });
+    .order("nombre", { ascending: true });
 
   if (error) {
     throw new Error("No se pudieron cargar los locales");

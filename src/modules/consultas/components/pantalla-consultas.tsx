@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
   calcularConsulta,
+  OPERATIVA_CONSULTA_VACIA,
   obtenerFamiliasDisponibles,
   obtenerSubfamiliasDisponibles,
   obtenerTiposDisponibles,
 } from "@/modules/consultas/utils/motor-consultas";
+import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import {
   consultaStateToQueryString,
   ESTADO_CONSULTA_INICIAL,
@@ -139,6 +141,28 @@ function MiniResumen({
 
 export function PantallaConsultas({ clasificacion, maestros }: PantallaConsultasProps) {
   const [state, setState] = useState(ESTADO_CONSULTA_INICIAL);
+  const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const cargar = async () => {
+      try {
+        const data = await cargarOperativaConsultas(clasificacion);
+        if (!cancelado) {
+          setOperativa(data);
+        }
+      } catch (error) {
+        console.error("No se pudo cargar la operativa para consultas", error);
+      }
+    };
+
+    void cargar();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [clasificacion]);
 
   const tiposDisponibles = useMemo(() => obtenerTiposDisponibles(clasificacion), [clasificacion]);
   const familiasDisponibles = useMemo(
@@ -155,9 +179,10 @@ export function PantallaConsultas({ clasificacion, maestros }: PantallaConsultas
       calcularConsulta({
         clasificacion,
         maestros,
+        operativa,
         state,
       }),
-    [clasificacion, maestros, state]
+    [clasificacion, maestros, operativa, state]
   );
 
   const detalleHref = useMemo(() => {

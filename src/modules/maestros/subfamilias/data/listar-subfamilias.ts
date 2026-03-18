@@ -4,7 +4,7 @@ export async function listarSubfamilias() {
   const { data, error } = await supabase
     .from("subfamilias")
     .select("id, nombre, familia_id, familias(id, nombre, tipo_id, tipos(id, nombre))")
-    .order("id", { ascending: true });
+    .order("nombre", { ascending: true });
 
   if (error) {
     throw new Error("No se pudieron cargar las subfamilias");

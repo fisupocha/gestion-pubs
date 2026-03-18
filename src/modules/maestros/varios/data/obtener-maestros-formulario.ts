@@ -13,7 +13,9 @@ export type MaestrosFormulario = {
 };
 
 function normalizarNombres(items: Array<{ nombre: string }> | null | undefined) {
-  return [...new Set((items ?? []).map((item) => item.nombre.trim()).filter(Boolean))];
+  return [...new Set((items ?? []).map((item) => item.nombre.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "es", { sensitivity: "base" })
+  );
 }
 
 function normalizarPorcentajes(items: Array<{ porcentaje: number }> | null | undefined) {

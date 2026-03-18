@@ -16,7 +16,7 @@ export async function listarFamilias() {
   const { data, error } = await supabase
     .from("familias")
     .select("id, nombre, tipo_id, tipos(id, nombre)")
-    .order("id", { ascending: true });
+    .order("nombre", { ascending: true });
 
   if (error) {
     throw new Error("No se pudieron cargar las familias");

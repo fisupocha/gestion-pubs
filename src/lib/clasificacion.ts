@@ -120,8 +120,15 @@ export function construirClasificacion(
   }
 
   const clasificacion: ClasificacionMapa = {};
+  const tiposOrdenados = [...tipos].sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
+  const familiasOrdenadas = [...familias].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+  );
+  const subfamiliasOrdenadas = [...subfamilias].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+  );
 
-  for (const tipo of tipos) {
+  for (const tipo of tiposOrdenados) {
     const tipoKey = crearClaveClasificacion(tipo.nombre);
 
     if (!tipoKey) {
@@ -134,8 +141,8 @@ export function construirClasificacion(
     };
   }
 
-  for (const familia of familias) {
-    const tipo = tipos.find((item) => item.id === familia.tipoId);
+  for (const familia of familiasOrdenadas) {
+    const tipo = tiposOrdenados.find((item) => item.id === familia.tipoId);
 
     if (!tipo) {
       continue;
@@ -154,14 +161,14 @@ export function construirClasificacion(
     };
   }
 
-  for (const subfamilia of subfamilias) {
-    const familia = familias.find((item) => item.id === subfamilia.familiaId);
+  for (const subfamilia of subfamiliasOrdenadas) {
+    const familia = familiasOrdenadas.find((item) => item.id === subfamilia.familiaId);
 
     if (!familia) {
       continue;
     }
 
-    const tipo = tipos.find((item) => item.id === familia.tipoId);
+    const tipo = tiposOrdenados.find((item) => item.id === familia.tipoId);
 
     if (!tipo) {
       continue;

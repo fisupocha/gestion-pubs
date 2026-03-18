@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
+import {
+  guardarImpuestoPersistido,
+  listarImpuestosPersistidos,
+} from "@/modules/operativa/utils/persistencia-operativa";
 
 const PROVEEDORES_PREDETERMINADOS: string[] = [];
 const FORMAS_PAGO = ["BANCO"];
@@ -271,6 +275,48 @@ export function PantallaImpuestos({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarPersistidos() {
+      try {
+        const persistidos = await listarImpuestosPersistidos(clasificacionActiva);
+
+        if (cancelado) {
+          return;
+        }
+
+        setRegistros(persistidos as RegistroFactura[]);
+
+        if (persistidos.length > 0) {
+          const ultimo = persistidos[persistidos.length - 1] as RegistroFactura;
+          setIndiceActual(persistidos.length - 1);
+          setModoNuevo(false);
+          setFormulario(formularioDesdeRegistro(ultimo));
+          setArchivoAdjunto(ultimo.adjunto);
+          setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
+        } else {
+          const inicial = crearFormularioInicial();
+          setIndiceActual(0);
+          setModoNuevo(true);
+          setFormulario(inicial);
+          setArchivoAdjunto(null);
+          setSnapshotInicial(crearSnapshot(inicial, null));
+        }
+      } catch {
+        if (!cancelado) {
+          window.alert("No se pudieron cargar los impuestos guardados.");
+        }
+      }
+    }
+
+    void cargarPersistidos();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [clasificacionActiva]);
+
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
       return [];
@@ -467,7 +513,7 @@ export function PantallaImpuestos({
     ejecutarDestino(destino);
   }
 
-  function guardarPrueba(e: React.FormEvent<HTMLFormElement>) {
+  async function guardarPrueba(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!formulario.empresa || !formulario.proveedor || !formulario.fechaFactura) {
@@ -485,34 +531,42 @@ export function PantallaImpuestos({
       return;
     }
 
-    if (modoNuevo) {
-      const nextId = obtenerSiguienteId(registros);
-      const nextRegistro: RegistroFactura = {
-        id: nextId,
+    try {
+      const registroActual: RegistroFactura = {
+        id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
         adjunto: archivoAdjunto,
       };
 
-      setRegistros((prev) => [...prev, nextRegistro]);
-      setIndiceActual(registros.length);
+      const persistido = (await guardarImpuestoPersistido(
+        registroActual,
+        clasificacionActiva
+      )) as RegistroFactura;
+
+      const registroGuardado: RegistroFactura = {
+        ...persistido,
+        adjunto: archivoAdjunto,
+      };
+
+      const siguientes = modoNuevo
+        ? [...registros, registroGuardado]
+        : registros.map((registro, indice) =>
+            indice === indiceActual ? registroGuardado : registro
+          );
+
+      setRegistros(siguientes);
+      setIndiceActual(
+        modoNuevo
+          ? siguientes.length - 1
+          : siguientes.findIndex((registro) => registro.id === registroGuardado.id)
+      );
       setModoNuevo(false);
-      setSnapshotInicial(crearSnapshot(formulario, archivoAdjunto));
-      return;
+      setFormulario(formularioDesdeRegistro(registroGuardado));
+      setArchivoAdjunto(registroGuardado.adjunto);
+      setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(registroGuardado), registroGuardado.adjunto));
+    } catch {
+      window.alert("No se pudo guardar el impuesto en BBDD.");
     }
-
-    setRegistros((prev) =>
-      prev.map((registro, indice) =>
-        indice === indiceActual
-          ? {
-              ...registro,
-              ...formulario,
-              adjunto: archivoAdjunto,
-            }
-          : registro
-      )
-    );
-
-    setSnapshotInicial(crearSnapshot(formulario, archivoAdjunto));
   }
 
   function seleccionarAdjunto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -854,7 +908,7 @@ export function PantallaImpuestos({
                   onChange={(e) => cambiarCampo("empresa", e.target.value)}
                   className={inputClassName}
                 >
-                  <option value="">Selecciona local</option>
+                  <option value="">Selec. local</option>
                   {opcionesLocal.map((item) => (
                     <option key={item} value={item}>
                       {item}

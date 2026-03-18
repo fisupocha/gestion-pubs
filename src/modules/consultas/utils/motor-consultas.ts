@@ -2,15 +2,6 @@
 
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
-import { REGISTROS_PRUEBA as REGISTROS_CAJA } from "@/modules/caja/components/pantalla-caja";
-import { REGISTROS_PRUEBA as REGISTROS_FACTURAS_EMITIDAS } from "@/modules/facturas-emitidas/components/pantalla-facturas-emitidas";
-import { REGISTROS_PRUEBA as REGISTROS_FACTURAS_RECIBIDAS } from "@/modules/facturas-recibidas/components/pantalla-facturas-recibidas";
-import { REGISTROS_PRUEBA as REGISTROS_ALQUILERES } from "@/modules/alquileres/components/pantalla-alquileres";
-import { REGISTROS_PRUEBA as REGISTROS_IMPUESTOS } from "@/modules/impuestos/components/pantalla-impuestos";
-import { REGISTROS_PRUEBA as REGISTROS_PERSONAL } from "@/modules/personal/components/pantalla-personal";
-import { REGISTROS_PRUEBA as REGISTROS_GASTOS_BANCARIOS } from "@/modules/gastos-bancarios/components/pantalla-gastos-bancarios";
-import { REGISTROS_PRUEBA as REGISTROS_CREDITOS } from "@/modules/creditos/components/pantalla-creditos";
-import { REGISTROS_PRUEBA as REGISTROS_NOTAS_VARIAS } from "@/modules/notas-varias/components/pantalla-notas-varias";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 
 export type RegistroBase = {
@@ -24,6 +15,30 @@ export type RegistroBase = {
   base4: string;
   base10: string;
   base21: string;
+};
+
+export type OperativaConsultaData = {
+  caja: RegistroBase[];
+  facturasEmitidas: RegistroBase[];
+  facturasRecibidas: RegistroBase[];
+  alquileres: RegistroBase[];
+  impuestos: RegistroBase[];
+  personal: RegistroBase[];
+  gastosBancarios: RegistroBase[];
+  creditos: RegistroBase[];
+  notasVarias: RegistroBase[];
+};
+
+export const OPERATIVA_CONSULTA_VACIA: OperativaConsultaData = {
+  caja: [],
+  facturasEmitidas: [],
+  facturasRecibidas: [],
+  alquileres: [],
+  impuestos: [],
+  personal: [],
+  gastosBancarios: [],
+  creditos: [],
+  notasVarias: [],
 };
 
 export type Movimiento = {
@@ -81,6 +96,11 @@ function norm(value?: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function esLocalEmpresa(value?: string) {
+  const normalized = norm(value);
+  return normalized === "empresa" || normalized === "riverocio";
 }
 
 function inRange(fecha: string, desde: string, hasta: string) {
@@ -179,38 +199,41 @@ function mkMovimiento(
     conIva: totales.conIva,
     sinIva: totales.sinIva,
     iva: totales.iva,
-    esEmpresa: norm(registro.empresa) === "empresa",
+    esEmpresa: esLocalEmpresa(registro.empresa),
     esEmitidaCaja,
   } satisfies Movimiento;
 }
 
-function obtenerMovimientos(clasificacion: ClasificacionMapa) {
+function obtenerMovimientos(
+  clasificacion: ClasificacionMapa,
+  operativa: OperativaConsultaData
+) {
   return [
-    ...REGISTROS_CAJA.map((r) =>
+    ...operativa.caja.map((r) =>
       mkMovimiento("caja", "caja", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_FACTURAS_EMITIDAS.map((r) =>
+    ...operativa.facturasEmitidas.map((r) =>
       mkMovimiento("facturas-emitidas", "emitida", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_FACTURAS_RECIBIDAS.map((r) =>
+    ...operativa.facturasRecibidas.map((r) =>
       mkMovimiento("facturas-recibidas", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_ALQUILERES.map((r) =>
+    ...operativa.alquileres.map((r) =>
       mkMovimiento("alquileres", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_IMPUESTOS.map((r) =>
+    ...operativa.impuestos.map((r) =>
       mkMovimiento("impuestos", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_PERSONAL.map((r) =>
+    ...operativa.personal.map((r) =>
       mkMovimiento("personal", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_GASTOS_BANCARIOS.map((r) =>
+    ...operativa.gastosBancarios.map((r) =>
       mkMovimiento("gastos-bancarios", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_CREDITOS.map((r) =>
+    ...operativa.creditos.map((r) =>
       mkMovimiento("creditos", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-    ...REGISTROS_NOTAS_VARIAS.map((r) =>
+    ...operativa.notasVarias.map((r) =>
       mkMovimiento("notas-varias", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
   ];
@@ -218,9 +241,10 @@ function obtenerMovimientos(clasificacion: ClasificacionMapa) {
 
 export function obtenerLocalesDisponibles(
   maestros: MaestrosFormulario,
-  clasificacion: ClasificacionMapa
+  clasificacion: ClasificacionMapa,
+  operativa: OperativaConsultaData
 ) {
-  const movimientos = obtenerMovimientos(clasificacion);
+  const movimientos = obtenerMovimientos(clasificacion, operativa);
   return [
     ...new Set([...maestros.locales, ...movimientos.map((item) => item.local)].filter(Boolean)),
   ];
@@ -267,13 +291,15 @@ export function obtenerSubfamiliasDisponibles(
 export function calcularConsulta({
   clasificacion,
   maestros,
+  operativa,
   state,
 }: {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
+  operativa: OperativaConsultaData;
   state: ConsultaState;
 }) {
-  const movimientos = obtenerMovimientos(clasificacion);
+  const movimientos = obtenerMovimientos(clasificacion, operativa);
   const localesDisponibles = [
     ...new Set([...maestros.locales, ...movimientos.map((item) => item.local)].filter(Boolean)),
   ];
@@ -288,7 +314,7 @@ export function calcularConsulta({
   const setLocales = new Set(locales);
   const aplicarReparto =
     state.localesSeleccionados.length > 0 &&
-    !state.localesSeleccionados.some((item) => norm(item) === "empresa");
+    !state.localesSeleccionados.some((item) => esLocalEmpresa(item));
   const importe = (item: Movimiento) =>
     state.modoIva === "con" ? item.conIva : item.sinIva;
   const ingresosActivo = state.tiposSeleccionados.includes(TIPO_INGRESOS);
@@ -321,9 +347,13 @@ export function calcularConsulta({
     return true;
   };
 
-  const base = movimientos.filter(
-    (item) => setLocales.has(item.local) && inRange(item.fecha, state.desde, state.hasta)
-  );
+  const base = movimientos.filter((item) => {
+    const localIncluido = aplicarReparto
+      ? setLocales.has(item.local) || item.esEmpresa
+      : setLocales.has(item.local);
+
+    return localIncluido && inRange(item.fecha, state.desde, state.hasta);
+  });
   const cajas = base.filter((item) => item.clase === "caja");
   const emitidas = base.filter((item) => item.clase === "emitida");
   const gastos = base.filter((item) => item.clase === "gasto");
@@ -352,7 +382,7 @@ export function calcularConsulta({
 
   const porLocal = new Map<string, ResumenLocal>();
   locales.forEach((local) => {
-    if (aplicarReparto && norm(local) === "empresa") return;
+    if (aplicarReparto && esLocalEmpresa(local)) return;
     porLocal.set(local, {
       local,
       caja: 0,
@@ -389,8 +419,9 @@ export function calcularConsulta({
         row.empresa = round2(netoEmpresa * (row.caja / cajaOperativa));
       });
     }
-  } else if (porLocal.has("EMPRESA")) {
-    const row = porLocal.get("EMPRESA");
+  } else {
+    const localEmpresa = [...porLocal.keys()].find((item) => esLocalEmpresa(item));
+    const row = localEmpresa ? porLocal.get(localEmpresa) : undefined;
     if (row) {
       row.directo = round2(
         row.directo + gastosEmpresa.reduce((acc, item) => acc + importe(item), 0)
