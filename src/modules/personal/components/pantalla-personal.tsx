@@ -9,14 +9,6 @@ import {
   listarPersonalPersistido,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
-const PROVEEDORES = [
-  "JULPER ARANJUEZ, S.L.",
-  "DISTRIBUCIONES CENTRO",
-  "COCACOLA EUROPACIFIC",
-  "ASESORIA RIVERO",
-];
-const FORMAS_PAGO = ["BANCO"];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -53,13 +45,13 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
-function crearFormularioInicial(): FormularioFactura {
+function crearFormularioInicial(tipoPersonal = ""): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
     fechaFactura: "",
     numeroFactura: "",
-    tipo: "",
+    tipo: tipoPersonal,
     familia: "",
     subfamilia: "",
     base0: "",
@@ -211,14 +203,22 @@ const campoDeshabilitadoClassName =
   "cursor-not-allowed border-[#dcc8c2] bg-[linear-gradient(180deg,#fcf9f8_0%,#efe6e3_100%)] text-[#96817b] shadow-none opacity-70";
 
 export function PantallaPersonal({
+  proveedores = [],
   clasificacion,
   maestros,
 }: {
+  proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
+  const tipoPersonalId = useMemo(
+    () =>
+      Object.entries(clasificacionActiva).find(([, item]) => item.label === "Personal")?.[0] ?? "",
+    [clasificacionActiva]
+  );
   const opcionesLocal = maestros?.locales ?? [];
+  const opcionesProveedor = proveedores;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
   type CampoResaltable =
@@ -236,9 +236,13 @@ export function PantallaPersonal({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [formulario, setFormulario] = useState<FormularioFactura>(() =>
+    crearFormularioInicial(tipoPersonalId)
+  );
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
-  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
+  const [snapshotInicial, setSnapshotInicial] = useState(() =>
+    crearSnapshot(crearFormularioInicial(tipoPersonalId), null)
+  );
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -294,7 +298,7 @@ export function PantallaPersonal({
           setArchivoAdjunto(ultimo.adjunto);
           setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
         } else {
-          const inicial = crearFormularioInicial();
+          const inicial = crearFormularioInicial(tipoPersonalId);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -313,7 +317,7 @@ export function PantallaPersonal({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, tipoPersonalId]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -419,15 +423,6 @@ export function PantallaPersonal({
     }));
   }
 
-  function cambiarTipo(nextTipo: TipoClasificacion) {
-    setFormulario((prev) => ({
-      ...prev,
-      tipo: nextTipo,
-      familia: "",
-      subfamilia: "",
-    }));
-  }
-
   function cambiarFamilia(nextFamilia: string) {
     setFormulario((prev) => ({
       ...prev,
@@ -463,7 +458,7 @@ export function PantallaPersonal({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial();
+    const nextFormulario = crearFormularioInicial(tipoPersonalId);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -742,7 +737,7 @@ export function PantallaPersonal({
       "pagado",
       registro.fechaFactura,
       registro.observaciones,
-      FORMAS_PAGO[0],
+      registro.formaPago || opcionesFormaPago[0] || "",
       registro.banco,
       registro.numeroPagare,
       ...expandirVariantesFechaBusqueda(registro.fechaFactura),
@@ -913,12 +908,11 @@ export function PantallaPersonal({
               <Campo label="Proveedor">
                 <select
                   value={formulario.proveedor}
-                  disabled
-                  aria-disabled="true"
-                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
+                  onChange={(e) => cambiarCampo("proveedor", e.target.value)}
+                  className={inputClassName}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {PROVEEDORES.map((item) => (
+                  {opcionesProveedor.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -939,10 +933,9 @@ export function PantallaPersonal({
                 <input
                   ref={numeroFacturaRef}
                   value={formulario.numeroFactura}
-                  disabled
-                  aria-disabled="true"
+                  onChange={(e) => cambiarCampo("numeroFactura", e.target.value)}
                   type="text"
-                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
+                  className={inputClassName}
                 />
               </Campo>
             </div>
@@ -951,29 +944,11 @@ export function PantallaPersonal({
               <Campo label="Tipo">
                 <select
                   value={formulario.tipo}
-                  onChange={(e) => {
-                    const nextTipo = e.target.value;
-
-                    if (!nextTipo) {
-                      setFormulario((prev) => ({
-                        ...prev,
-                        tipo: "",
-                        familia: "",
-                        subfamilia: "",
-                      }));
-                      return;
-                    }
-
-                    cambiarTipo(nextTipo as TipoClasificacion);
-                  }}
-                  className={inputClassName}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona tipo</option>
-                    {Object.entries(clasificacionActiva).map(([id, item]) => (
-                      <option key={id} value={id}>
-                        {item.label}
-                      </option>
-                    ))}
+                  <option value={tipoPersonalId}>{clasificacionActiva[tipoPersonalId]?.label ?? "Personal"}</option>
                 </select>
               </Campo>
 

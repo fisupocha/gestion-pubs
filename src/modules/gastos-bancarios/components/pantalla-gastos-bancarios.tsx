@@ -9,15 +9,6 @@ import {
   listarGastosBancariosPersistidos,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
-const PROVEEDORES = [
-  "JULPER ARANJUEZ, S.L.",
-  "DISTRIBUCIONES CENTRO",
-  "COCACOLA EUROPACIFIC",
-  "ASESORIA RIVERO",
-];
-const FORMAS_PAGO = ["BANCO"];
-const BANCOS = ["CAIXABANK", "SANTANDER", "BBVA", "NINGUNO"];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -54,7 +45,7 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
-function crearFormularioInicial(): FormularioFactura {
+function crearFormularioInicial(formaPago = "", banco = ""): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
@@ -69,8 +60,8 @@ function crearFormularioInicial(): FormularioFactura {
     base21: "",
     pagado: true,
     fechaPago: "",
-    formaPago: FORMAS_PAGO[0],
-    banco: BANCOS[0],
+    formaPago,
+    banco,
     numeroPagare: "",
     observaciones: "",
   };
@@ -91,7 +82,7 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     base21: registro.base21,
     pagado: true,
     fechaPago: registro.fechaFactura,
-    formaPago: FORMAS_PAGO[0],
+    formaPago: registro.formaPago,
     banco: registro.banco,
     numeroPagare: registro.numeroPagare,
     observaciones: registro.observaciones,
@@ -215,16 +206,24 @@ const tarjetaDeshabilitadaClassName =
   "rounded-2xl border border-[#cfdadd] bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] px-3.5 py-1.5 text-center opacity-70 shadow-none 2xl:px-4 2xl:py-2";
 
 export function PantallaGastosBancarios({
+  proveedores = [],
   clasificacion,
   maestros,
 }: {
+  proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
+  const opcionesProveedor = proveedores;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
+  const formaPagoFija =
+    opcionesFormaPago.find((item) => item.localeCompare("BANCO", "es", { sensitivity: "base" }) === 0) ??
+    opcionesFormaPago[0] ??
+    "";
+  const bancoPorDefecto = opcionesBanco[0] ?? "";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -240,9 +239,13 @@ export function PantallaGastosBancarios({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [formulario, setFormulario] = useState<FormularioFactura>(() =>
+    crearFormularioInicial(formaPagoFija, bancoPorDefecto)
+  );
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
-  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
+  const [snapshotInicial, setSnapshotInicial] = useState(() =>
+    crearSnapshot(crearFormularioInicial(formaPagoFija, bancoPorDefecto), null)
+  );
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -298,7 +301,7 @@ export function PantallaGastosBancarios({
           setArchivoAdjunto(ultimo.adjunto);
           setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
         } else {
-          const inicial = crearFormularioInicial();
+          const inicial = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -317,7 +320,7 @@ export function PantallaGastosBancarios({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, bancoPorDefecto, formaPagoFija]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -469,7 +472,7 @@ export function PantallaGastosBancarios({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial();
+    const nextFormulario = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -750,7 +753,7 @@ export function PantallaGastosBancarios({
       "pagado",
       registro.fechaFactura,
       registro.observaciones,
-      FORMAS_PAGO[0],
+      registro.formaPago || formaPagoFija,
       registro.banco,
       registro.numeroPagare,
       ...expandirVariantesFechaBusqueda(registro.fechaFactura),
@@ -926,7 +929,7 @@ export function PantallaGastosBancarios({
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {PROVEEDORES.map((item) => (
+                  {opcionesProveedor.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -1217,7 +1220,7 @@ export function PantallaGastosBancarios({
 
               <Campo label="Forma de pago">
                 <select
-                  value={FORMAS_PAGO[0]}
+                  value={formaPagoFija}
                   disabled
                   aria-disabled="true"
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}

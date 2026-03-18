@@ -9,14 +9,6 @@ import {
   listarNotasVariasPersistidas,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
-const CLIENTES = [
-  "AYUNTAMIENTO DE ARANJUEZ",
-  "EVENTOS DEL TAJO, S.L.",
-  "PRODUCCIONES CENTRO",
-  "HOSTELERIA RIVERO",
-];
-const BANCOS = ["CAIXABANK", "SANTANDER", "BBVA", "NINGUNO"];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -53,7 +45,7 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
-function crearFormularioInicial(): FormularioFactura {
+function crearFormularioInicial(formaPago = "", banco = ""): FormularioFactura {
   return {
     empresa: "",
     cliente: "",
@@ -68,8 +60,8 @@ function crearFormularioInicial(): FormularioFactura {
     base21: "",
     pagado: true,
     fechaPago: "",
-    formaPago: "EFECTIVO",
-    banco: BANCOS[0],
+    formaPago,
+    banco,
     numeroPagare: "",
     observaciones: "",
   };
@@ -214,16 +206,24 @@ const tarjetaDeshabilitadaClassName =
   "rounded-2xl border border-[#d7ccdf] bg-[linear-gradient(180deg,#fbf9fd_0%,#eee8f3_100%)] px-3.5 py-1.5 text-center opacity-70 shadow-none 2xl:px-4 2xl:py-2";
 
 export function PantallaNotasVarias({
+  clientes = [],
   clasificacion,
   maestros,
 }: {
+  clientes?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
+  const opcionesCliente = clientes;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
+  const formaPagoFija =
+    opcionesFormaPago.find((item) => item.localeCompare("EFECTIVO", "es", { sensitivity: "base" }) === 0) ??
+    opcionesFormaPago[0] ??
+    "EFECTIVO";
+  const bancoPorDefecto = opcionesBanco[0] ?? "";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -239,9 +239,13 @@ export function PantallaNotasVarias({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [formulario, setFormulario] = useState<FormularioFactura>(() =>
+    crearFormularioInicial(formaPagoFija, bancoPorDefecto)
+  );
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
-  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
+  const [snapshotInicial, setSnapshotInicial] = useState(() =>
+    crearSnapshot(crearFormularioInicial(formaPagoFija, bancoPorDefecto), null)
+  );
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -297,7 +301,7 @@ export function PantallaNotasVarias({
           setArchivoAdjunto(ultimo.adjunto);
           setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
         } else {
-          const inicial = crearFormularioInicial();
+          const inicial = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -316,7 +320,7 @@ export function PantallaNotasVarias({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [bancoPorDefecto, clasificacionActiva, formaPagoFija]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -464,7 +468,7 @@ export function PantallaNotasVarias({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial();
+    const nextFormulario = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -921,7 +925,7 @@ export function PantallaNotasVarias({
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {CLIENTES.map((item) => (
+                  {opcionesCliente.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>

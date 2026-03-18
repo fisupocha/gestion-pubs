@@ -9,14 +9,6 @@ import {
   listarCreditosPersistidos,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
-const PROVEEDORES = [
-  "JULPER ARANJUEZ, S.L.",
-  "DISTRIBUCIONES CENTRO",
-  "COCACOLA EUROPACIFIC",
-  "ASESORIA RIVERO",
-];
-const FORMAS_PAGO = ["BANCO"];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -53,7 +45,7 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
-function crearFormularioInicial(): FormularioFactura {
+function crearFormularioInicial(formaPago = ""): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
@@ -68,7 +60,7 @@ function crearFormularioInicial(): FormularioFactura {
     base21: "",
     pagado: true,
     fechaPago: "",
-    formaPago: FORMAS_PAGO[0],
+    formaPago,
     banco: "",
     numeroPagare: "",
     observaciones: "",
@@ -90,7 +82,7 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     base21: registro.base21,
     pagado: true,
     fechaPago: registro.fechaFactura,
-    formaPago: FORMAS_PAGO[0],
+    formaPago: registro.formaPago,
     banco: registro.banco,
     numeroPagare: registro.numeroPagare,
     observaciones: registro.observaciones,
@@ -214,16 +206,23 @@ const tarjetaDeshabilitadaClassName =
   "rounded-2xl border border-[#d8cad0] bg-[linear-gradient(180deg,#fbf8f9_0%,#eee5e8_100%)] px-3.5 py-1.5 text-center opacity-70 shadow-none 2xl:px-4 2xl:py-2";
 
 export function PantallaCreditos({
+  proveedores = [],
   clasificacion,
   maestros,
 }: {
+  proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
+  const opcionesProveedor = proveedores;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
+  const formaPagoFija =
+    opcionesFormaPago.find((item) => item.localeCompare("BANCO", "es", { sensitivity: "base" }) === 0) ??
+    opcionesFormaPago[0] ??
+    "";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -239,9 +238,9 @@ export function PantallaCreditos({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial(formaPagoFija));
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
-  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
+  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(formaPagoFija), null));
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -297,7 +296,7 @@ export function PantallaCreditos({
           setArchivoAdjunto(ultimo.adjunto);
           setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
         } else {
-          const inicial = crearFormularioInicial();
+          const inicial = crearFormularioInicial(formaPagoFija);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -316,7 +315,7 @@ export function PantallaCreditos({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, formaPagoFija]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -468,7 +467,7 @@ export function PantallaCreditos({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial();
+    const nextFormulario = crearFormularioInicial(formaPagoFija);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -925,7 +924,7 @@ export function PantallaCreditos({
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {PROVEEDORES.map((item) => (
+                  {opcionesProveedor.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>
@@ -1216,7 +1215,7 @@ export function PantallaCreditos({
 
               <Campo label="Forma de pago">
                 <select
-                  value={FORMAS_PAGO[0]}
+                  value={formaPagoFija}
                   disabled
                   aria-disabled="true"
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}

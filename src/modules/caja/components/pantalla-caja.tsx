@@ -9,13 +9,6 @@ import {
   listarCajaPersistida,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
-const PROVEEDORES = [
-  "JULPER ARANJUEZ, S.L.",
-  "DISTRIBUCIONES CENTRO",
-  "COCACOLA EUROPACIFIC",
-  "ASESORIA RIVERO",
-];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -210,14 +203,17 @@ const campoDeshabilitadoClassName =
   "cursor-not-allowed border-[#d1d7dc] bg-[linear-gradient(180deg,#fafbfc_0%,#eceff1_100%)] text-[#8a929a] shadow-none opacity-70";
 
 export function PantallaCaja({
+  proveedores = [],
   clasificacion,
   maestros,
 }: {
+  proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
+  const opcionesProveedor = proveedores;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
   type CampoResaltable =
@@ -941,7 +937,7 @@ export function PantallaCaja({
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
-                  {PROVEEDORES.map((item) => (
+                  {opcionesProveedor.map((item) => (
                     <option key={item} value={item}>
                       {item}
                     </option>

@@ -18,6 +18,8 @@ export const ESTADO_CONSULTA_INICIAL: ConsultaState = {
   subfamiliasSeleccionadas: [],
 };
 
+export const CONSULTAS_STORAGE_KEY = "gestion-pubs:consultas-state";
+
 type SearchParamsInput =
   | URLSearchParams
   | Record<string, string | string[] | undefined>;
@@ -65,4 +67,60 @@ export function consultaStateToQueryString(state: ConsultaState) {
   if (state.modoIva !== "con") params.set("iva", state.modoIva);
 
   return params.toString();
+}
+
+export function esEstadoConsultaVacio(state: ConsultaState) {
+  return (
+    state.localesSeleccionados.length === 0 &&
+    state.desde === "" &&
+    state.hasta === "" &&
+    state.modoIva === "con" &&
+    state.tiposSeleccionados.length === 0 &&
+    state.familiasSeleccionadas.length === 0 &&
+    state.subfamiliasSeleccionadas.length === 0
+  );
+}
+
+export function normalizarConsultaState(value: unknown): ConsultaState {
+  const input = typeof value === "object" && value !== null ? (value as Partial<ConsultaState>) : {};
+
+  return {
+    localesSeleccionados: Array.isArray(input.localesSeleccionados)
+      ? input.localesSeleccionados.filter(Boolean)
+      : [],
+    desde: typeof input.desde === "string" ? input.desde : "",
+    hasta: typeof input.hasta === "string" ? input.hasta : "",
+    modoIva: input.modoIva === "sin" ? "sin" : "con",
+    tiposSeleccionados: Array.isArray(input.tiposSeleccionados)
+      ? input.tiposSeleccionados.filter(Boolean)
+      : [],
+    familiasSeleccionadas: Array.isArray(input.familiasSeleccionadas)
+      ? input.familiasSeleccionadas.filter(Boolean)
+      : [],
+    subfamiliasSeleccionadas: Array.isArray(input.subfamiliasSeleccionadas)
+      ? input.subfamiliasSeleccionadas.filter(Boolean)
+      : [],
+  };
+}
+
+export function leerConsultaStateGuardado() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(CONSULTAS_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizarConsultaState(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function guardarConsultaState(state: ConsultaState) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(CONSULTAS_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // no-op
+  }
 }

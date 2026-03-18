@@ -82,6 +82,10 @@ export const TIPO_INGRESOS = "Ingresos";
 export const FAMILIA_CAJA = "Caja";
 export const FAMILIA_FACTURAS_EMITIDAS = "Facturas emitidas";
 
+function ordenarAlfabetico(values: string[]) {
+  return [...values].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+}
+
 function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -251,8 +255,23 @@ export function obtenerLocalesDisponibles(
 }
 
 export function obtenerTiposDisponibles(clasificacion: ClasificacionMapa) {
-  const base = Object.values(clasificacion).map((item) => item.label);
+  const base = ordenarAlfabetico(Object.values(clasificacion).map((item) => item.label));
   return base.includes(TIPO_INGRESOS) ? base : [...base, TIPO_INGRESOS];
+}
+
+export function obtenerFamiliasPorTipoConsulta(clasificacion: ClasificacionMapa, tipo: string) {
+  const base =
+    Object.values(clasificacion).find((item) => item.label === tipo)
+      ? Object.values(
+          Object.values(clasificacion).find((item) => item.label === tipo)?.familias ?? {}
+        ).map((familia) => familia.label)
+      : [];
+
+  if (tipo === TIPO_INGRESOS) {
+    base.push(FAMILIA_CAJA, FAMILIA_FACTURAS_EMITIDAS);
+  }
+
+  return ordenarAlfabetico([...new Set(base)]);
 }
 
 export function obtenerFamiliasDisponibles(
@@ -261,15 +280,9 @@ export function obtenerFamiliasDisponibles(
 ) {
   if (tiposSeleccionados.length === 0) return [];
 
-  const out = Object.values(clasificacion)
-    .filter((item) => tiposSeleccionados.includes(item.label))
-    .flatMap((item) => Object.values(item.familias).map((familia) => familia.label));
+  const out = tiposSeleccionados.flatMap((tipo) => obtenerFamiliasPorTipoConsulta(clasificacion, tipo));
 
-  if (tiposSeleccionados.includes(TIPO_INGRESOS)) {
-    out.push(FAMILIA_CAJA, FAMILIA_FACTURAS_EMITIDAS);
-  }
-
-  return [...new Set(out)];
+  return ordenarAlfabetico([...new Set(out)]);
 }
 
 export function obtenerSubfamiliasDisponibles(
@@ -303,6 +316,7 @@ export function calcularConsulta({
   const localesDisponibles = [
     ...new Set([...maestros.locales, ...movimientos.map((item) => item.local)].filter(Boolean)),
   ];
+  const localesOperativosNegocio = localesDisponibles.filter((item) => !esLocalEmpresa(item));
   const tiposDisponibles = obtenerTiposDisponibles(clasificacion);
   const familiasDisponibles = obtenerFamiliasDisponibles(clasificacion, state.tiposSeleccionados);
   const subfamiliasDisponibles = obtenerSubfamiliasDisponibles(
@@ -310,11 +324,14 @@ export function calcularConsulta({
     state.familiasSeleccionadas
   );
 
+  const localesSeleccionadosOperativos = state.localesSeleccionados.filter(
+    (item) => !esLocalEmpresa(item)
+  );
+  const empresaSeleccionada = state.localesSeleccionados.some((item) => esLocalEmpresa(item));
+  const aplicarReparto =
+    localesSeleccionadosOperativos.length > 0 && !empresaSeleccionada;
   const locales = state.localesSeleccionados.length > 0 ? state.localesSeleccionados : localesDisponibles;
   const setLocales = new Set(locales);
-  const aplicarReparto =
-    state.localesSeleccionados.length > 0 &&
-    !state.localesSeleccionados.some((item) => esLocalEmpresa(item));
   const importe = (item: Movimiento) =>
     state.modoIva === "con" ? item.conIva : item.sinIva;
   const ingresosActivo = state.tiposSeleccionados.includes(TIPO_INGRESOS);
@@ -354,9 +371,17 @@ export function calcularConsulta({
 
     return localIncluido && inRange(item.fecha, state.desde, state.hasta);
   });
+  const setLocalesOperativosNegocio = new Set(localesOperativosNegocio);
+  const baseRepartoEmpresa = movimientos.filter(
+    (item) =>
+      !item.esEmpresa &&
+      setLocalesOperativosNegocio.has(item.local) &&
+      inRange(item.fecha, state.desde, state.hasta)
+  );
   const cajas = base.filter((item) => item.clase === "caja");
   const emitidas = base.filter((item) => item.clase === "emitida");
   const gastos = base.filter((item) => item.clase === "gasto");
+  const cajasRepartoEmpresa = baseRepartoEmpresa.filter((item) => item.clase === "caja");
 
   const cajaUsada = round2(cajas.reduce((acc, item) => acc + importe(item), 0));
   const ivaCaja = round2(cajas.reduce((acc, item) => acc + item.iva, 0));
@@ -411,12 +436,26 @@ export function calcularConsulta({
     gastosEmpresa.reduce((acc, item) => acc + importe(item), 0) -
       emitidasEmpresa.reduce((acc, item) => acc + importe(item), 0)
   );
+  const cajaOperativa = round2(
+    cajasRepartoEmpresa.reduce((acc, item) => acc + importe(item), 0)
+  );
+  const cajaSeleccionOperativa = round2(
+    cajasRepartoEmpresa
+      .filter((item) => setLocales.has(item.local))
+      .reduce((acc, item) => acc + importe(item), 0)
+  );
+  const factorRepartoDetalle =
+    aplicarReparto && cajaOperativa > 0 ? cajaSeleccionOperativa / cajaOperativa : 1;
 
   if (aplicarReparto) {
-    const cajaOperativa = round2([...porLocal.values()].reduce((acc, item) => acc + item.caja, 0));
     if (cajaOperativa > 0) {
+      const cajaPorLocal = new Map<string, number>();
+      cajasRepartoEmpresa.forEach((item) => {
+        cajaPorLocal.set(item.local, round2((cajaPorLocal.get(item.local) ?? 0) + importe(item)));
+      });
       [...porLocal.values()].forEach((row) => {
-        row.empresa = round2(netoEmpresa * (row.caja / cajaOperativa));
+        const cajaLocal = cajaPorLocal.get(row.local) ?? 0;
+        row.empresa = round2(netoEmpresa * (cajaLocal / cajaOperativa));
       });
     }
   } else {
@@ -452,7 +491,7 @@ export function calcularConsulta({
       ? gastoNeto
       : 0;
   const importeSeleccion = round2(ingresoSeleccionado + gastoSeleccionado);
-  const porcentaje = cajaUsada > 0 ? round2((importeSeleccion / cajaUsada) * 100) : 0;
+  const porcentaje = cajaUsada > 0 ? round2((gastoNeto / cajaUsada) * 100) : 0;
   const beneficio = round2(cajaUsada - gastoNeto);
 
   const detalleMap = new Map<string, ResumenClasificacion>();
@@ -468,8 +507,9 @@ export function calcularConsulta({
       gastoNeto: 0,
       iva: 0,
     };
-    row.gastoBruto = round2(row.gastoBruto + importe(item));
-    row.iva = round2(row.iva + item.iva);
+    const factor = item.esEmpresa ? factorRepartoDetalle : 1;
+    row.gastoBruto = round2(row.gastoBruto + importe(item) * factor);
+    row.iva = round2(row.iva + item.iva * factor);
     detalleMap.set(key, row);
   });
   emitidasSel.forEach((item) => {
@@ -484,7 +524,8 @@ export function calcularConsulta({
       gastoNeto: 0,
       iva: 0,
     };
-    row.emitidas = round2(row.emitidas + importe(item));
+    const factor = item.esEmpresa ? factorRepartoDetalle : 1;
+    row.emitidas = round2(row.emitidas + importe(item) * factor);
     detalleMap.set(key, row);
   });
 
@@ -511,6 +552,7 @@ export function calcularConsulta({
       ivaCaja,
       emitidasCajaIgnoradas,
       emitidasCompensacionTotal,
+      ingresoSeleccionado,
       bruto,
       gastoNeto,
       ivaGasto,

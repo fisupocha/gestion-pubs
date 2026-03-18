@@ -10,8 +10,6 @@ import {
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 const PROVEEDORES_PREDETERMINADOS: string[] = [];
-const FORMAS_PAGO = ["BANCO"];
-
 type TipoClasificacion = string;
 
 type FormularioFactura = {
@@ -48,7 +46,7 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
-function crearFormularioInicial(): FormularioFactura {
+function crearFormularioInicial(formaPago = ""): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
@@ -63,7 +61,7 @@ function crearFormularioInicial(): FormularioFactura {
     base21: "",
     pagado: false,
     fechaPago: "",
-    formaPago: "",
+    formaPago,
     banco: "",
     numeroPagare: "",
     observaciones: "",
@@ -222,6 +220,10 @@ export function PantallaImpuestos({
   const opcionesLocal = maestros?.locales ?? [];
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
+  const formaPagoFija =
+    opcionesFormaPago.find((item) => item.localeCompare("BANCO", "es", { sensitivity: "base" }) === 0) ??
+    opcionesFormaPago[0] ??
+    "";
 
   type CampoResaltable =
     | "fechaFactura"
@@ -238,9 +240,9 @@ export function PantallaImpuestos({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial());
+  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial(formaPagoFija));
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
-  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(), null));
+  const [snapshotInicial, setSnapshotInicial] = useState(() => crearSnapshot(crearFormularioInicial(formaPagoFija), null));
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
     destino: DestinoNavegacion | null;
@@ -296,7 +298,7 @@ export function PantallaImpuestos({
           setArchivoAdjunto(ultimo.adjunto);
           setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
         } else {
-          const inicial = crearFormularioInicial();
+          const inicial = crearFormularioInicial(formaPagoFija);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -315,7 +317,7 @@ export function PantallaImpuestos({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, formaPagoFija]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -468,7 +470,7 @@ export function PantallaImpuestos({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial();
+    const nextFormulario = crearFormularioInicial(formaPagoFija);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -749,7 +751,7 @@ export function PantallaImpuestos({
       "pagado",
       registro.fechaFactura,
       registro.observaciones,
-      FORMAS_PAGO[0],
+      registro.formaPago || formaPagoFija,
       registro.banco,
       registro.numeroPagare,
       ...expandirVariantesFechaBusqueda(registro.fechaFactura),
@@ -1215,7 +1217,7 @@ export function PantallaImpuestos({
 
               <Campo label="Forma de pago">
                 <select
-                  value={FORMAS_PAGO[0]}
+                  value={formaPagoFija}
                   disabled
                   aria-disabled="true"
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}

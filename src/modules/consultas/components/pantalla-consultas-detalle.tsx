@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
   calcularConsulta,
+  FAMILIA_CAJA,
+  FAMILIA_FACTURAS_EMITIDAS,
+  obtenerFamiliasPorTipoConsulta,
+  obtenerTiposDisponibles,
   OPERATIVA_CONSULTA_VACIA,
+  TIPO_INGRESOS,
 } from "@/modules/consultas/utils/motor-consultas";
 import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
@@ -18,8 +23,18 @@ type PantallaConsultasDetalleProps = {
   initialState: ConsultaState;
 };
 
-const panel =
-  "rounded-[24px] border border-[#d2b7aa] bg-[linear-gradient(180deg,rgba(250,244,241,0.98)_0%,rgba(238,226,221,0.98)_100%)] p-4 shadow-[0_16px_28px_rgba(85,52,46,0.08)]";
+type FamiliaDetalle = {
+  familia: string;
+  importe: number;
+  porcentaje: number;
+};
+
+type TipoDetalle = {
+  tipo: string;
+  total: number;
+  porcentaje: number;
+  familias: FamiliaDetalle[];
+};
 
 function fmtMoney(value: number) {
   return `${value.toLocaleString("es-ES", {
@@ -35,6 +50,13 @@ function fmtPercent(value: number) {
   })}%`;
 }
 
+function fmtDate(value: string) {
+  if (!value) return "-";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
 function csvEscape(value: string | number) {
   const text = String(value);
   if (/[;"\n]/.test(text)) {
@@ -43,12 +65,17 @@ function csvEscape(value: string | number) {
   return text;
 }
 
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 export function PantallaConsultasDetalle({
   clasificacion,
   maestros,
   initialState,
 }: PantallaConsultasDetalleProps) {
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
+  const reportRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -87,50 +114,107 @@ export function PantallaConsultasDetalle({
     return query ? `/consultas?${query}` : "/consultas";
   }, [initialState]);
 
-  const filtrosTexto = [
-    resultado.textoLocales,
-    initialState.desde ? `Desde ${initialState.desde}` : null,
-    initialState.hasta ? `Hasta ${initialState.hasta}` : null,
-    initialState.modoIva === "con" ? "Con IVA" : "Sin IVA",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const localesCabecera = useMemo(() => {
+    const disponibles = [...new Set(resultado.localesDisponibles)].filter(Boolean);
+    const seleccionados = initialState.localesSeleccionados;
+    if (seleccionados.length === 0 || seleccionados.length === disponibles.length) {
+      return "Todos";
+    }
+    return seleccionados.join(" + ");
+  }, [initialState.localesSeleccionados, resultado.localesDisponibles]);
+
+  const detalleTipos = useMemo(() => {
+    const cajaBase = resultado.datos.cajaUsada;
+    const porcentajeSobreCaja = (importe: number) =>
+      cajaBase > 0 ? round2((importe / cajaBase) * 100) : 0;
+
+    const familiaMap = new Map<string, number>();
+    resultado.datos.detalleClasificacion.forEach((row) => {
+      const key = `${row.tipo}|||${row.familia}`;
+      familiaMap.set(key, round2((familiaMap.get(key) ?? 0) + row.gastoNeto));
+    });
+
+    const tiposBase =
+      initialState.tiposSeleccionados.length > 0
+        ? initialState.tiposSeleccionados
+        : obtenerTiposDisponibles(clasificacion);
+
+    const tiposSeleccionados = [...new Set(tiposBase)].sort((a, b) =>
+      a.localeCompare(b, "es", { sensitivity: "base" })
+    );
+
+    return tiposSeleccionados.map((tipo) => {
+      let familiasBase =
+        initialState.familiasSeleccionadas.length > 0
+          ? initialState.familiasSeleccionadas.filter((familia) =>
+              obtenerFamiliasPorTipoConsulta(clasificacion, tipo).includes(familia)
+            )
+          : obtenerFamiliasPorTipoConsulta(clasificacion, tipo);
+
+      if (tipo === TIPO_INGRESOS) {
+        familiasBase = [
+          ...new Set([...familiasBase, FAMILIA_CAJA, FAMILIA_FACTURAS_EMITIDAS]),
+        ];
+      }
+
+      const familias = [...new Set(familiasBase)]
+        .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
+        .map((familia) => {
+          let importe = familiaMap.get(`${tipo}|||${familia}`) ?? 0;
+
+          if (tipo === TIPO_INGRESOS && familia === FAMILIA_CAJA) {
+            importe = resultado.datos.cajaUsada;
+          }
+          if (tipo === TIPO_INGRESOS && familia === FAMILIA_FACTURAS_EMITIDAS) {
+            importe = round2(
+              resultado.datos.emitidasCompensacionTotal + resultado.datos.emitidasCajaIgnoradas
+            );
+          }
+
+          return {
+            familia,
+            importe,
+            porcentaje: porcentajeSobreCaja(importe),
+          };
+        });
+
+      const total = round2(familias.reduce((acc, item) => acc + item.importe, 0));
+
+      return {
+        tipo,
+        total,
+        porcentaje: porcentajeSobreCaja(total),
+        familias,
+      } satisfies TipoDetalle;
+    });
+  }, [
+    clasificacion,
+    initialState.familiasSeleccionadas,
+    initialState.tiposSeleccionados,
+    resultado,
+  ]);
 
   const exportarCsv = () => {
     const lineas = [
-      ["Resumen", "Valor"],
-      ["Locales", resultado.textoLocales],
-      ["Modo", resultado.datos.aplicarReparto ? "Locales repercutidos" : "Total grupo"],
-      ["Caja usada", resultado.datos.cajaUsada],
-      ["Emitidas caja", resultado.datos.emitidasCajaIgnoradas],
-      ["Emitidas compensan", resultado.datos.emitidasCompensacionTotal],
-      ["Gasto bruto", resultado.datos.bruto],
-      ["Gasto neto", resultado.datos.gastoNeto],
-      ["Beneficio", resultado.datos.beneficio],
+      ["Consulta detalle"],
+      ["Locales", localesCabecera],
+      ["Desde", fmtDate(initialState.desde)],
+      ["Hasta", fmtDate(initialState.hasta)],
+      ["Caja", resultado.datos.cajaUsada],
       [""],
-      ["Por local"],
-      ["Local", "Caja", "Directo", "Emitidas", "Empresa", "Neto", "%"],
-      ...resultado.datos.porLocal.map((row) => [
-        row.local,
-        row.caja,
-        row.directo,
-        row.emitidas,
-        row.empresa,
-        row.neto,
-        row.porcentaje,
+      ["Tipo/Familia", "Importe", "%"],
+      ...detalleTipos.flatMap((bloque) => [
+        [bloque.tipo, bloque.total, bloque.porcentaje],
+        ...bloque.familias.map((familia) => [
+          `    ${familia.familia}`,
+          familia.importe,
+          familia.porcentaje,
+        ]),
       ]),
       [""],
-      ["Por tipo/fam/sub"],
-      ["Tipo", "Familia", "Subfamilia", "Gasto bruto", "Emitidas", "Gasto neto", "IVA"],
-      ...resultado.datos.detalleClasificacion.map((row) => [
-        row.tipo,
-        row.familia,
-        row.subfamilia,
-        row.gastoBruto,
-        row.emitidas,
-        row.gastoNeto,
-        row.iva,
-      ]),
+      ["Caja total", resultado.datos.cajaUsada],
+      ["Gasto total", resultado.datos.gastoNeto],
+      ["%", resultado.datos.porcentaje],
     ];
 
     const csv = `\uFEFF${lineas
@@ -145,25 +229,75 @@ export function PantallaConsultasDetalle({
     URL.revokeObjectURL(url);
   };
 
+  const abrirVentanaImpresion = (title: string) => {
+    const reportNode = reportRef.current;
+    if (!reportNode) return;
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
+    if (!popup) return;
+
+    const estilosHead = Array.from(
+      document.head.querySelectorAll('style, link[rel="stylesheet"]')
+    )
+      .map((node) => node.outerHTML)
+      .join("\n");
+
+    popup.document.open();
+    popup.document.write(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    ${estilosHead}
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+      }
+      body {
+        padding: 16px;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+      @media print {
+        html, body {
+          background: #ffffff !important;
+        }
+        body {
+          padding: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    ${reportNode.outerHTML}
+    <script>
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          window.focus();
+          window.print();
+        }, 150);
+      });
+    </script>
+  </body>
+</html>`);
+    popup.document.close();
+  };
+
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 p-3">
-      <section className={`${panel} flex items-start justify-between gap-4`}>
-        <div className="min-w-0">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8a6458]">
-            Detalle
-          </div>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#402a24]">
-            Consulta completa
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-[#7b635b]">{filtrosTexto}</p>
-        </div>
-        <div className="grid shrink-0 gap-2 xl:grid-cols-3">
-          <Link
-            href={volverHref}
-            className="rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-4 py-2 text-center text-sm font-bold text-[#765650]"
-          >
-            Volver
-          </Link>
+      <div className="print-hide flex items-center justify-between gap-3">
+        <Link
+          href={volverHref}
+          className="rounded-2xl border border-[#d7c0b9] bg-[linear-gradient(180deg,#fffaf8_0%,#f4ebe7_100%)] px-4 py-2 text-sm font-bold text-[#6f534b]"
+        >
+          Volver
+        </Link>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => window.print()}
@@ -173,81 +307,139 @@ export function PantallaConsultasDetalle({
           </button>
           <button
             type="button"
+            onClick={() => abrirVentanaImpresion("consulta-detalle-pdf")}
+            className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2 text-sm font-black text-[#5a3025]"
+          >
+            Exportar PDF
+          </button>
+          <button
+            type="button"
             onClick={exportarCsv}
             className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2 text-sm font-black text-[#5a3025]"
           >
             Exportar CSV
           </button>
         </div>
-      </section>
-
-      <div className="grid gap-3 xl:grid-cols-5">
-        <section className={`${panel} p-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">Caja</div>
-          <div className="mt-1 text-2xl font-black text-[#432c26]">{fmtMoney(resultado.datos.cajaUsada)}</div>
-        </section>
-        <section className={`${panel} p-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">Emitidas caja</div>
-          <div className="mt-1 text-2xl font-black text-[#432c26]">{fmtMoney(resultado.datos.emitidasCajaIgnoradas)}</div>
-        </section>
-        <section className={`${panel} p-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">Compensan</div>
-          <div className="mt-1 text-2xl font-black text-[#432c26]">{fmtMoney(resultado.datos.emitidasCompensacionTotal)}</div>
-        </section>
-        <section className={`${panel} p-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">Gasto neto</div>
-          <div className="mt-1 text-2xl font-black text-[#432c26]">{fmtMoney(resultado.datos.gastoNeto)}</div>
-        </section>
-        <section className="rounded-[24px] border border-[#b9796d] bg-[linear-gradient(180deg,#f2d8cf_0%,#e8c0b3_100%)] p-3 shadow-[0_12px_20px_rgba(85,52,46,0.12)]">
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#884b3d]">% sobre caja</div>
-          <div className="mt-1 text-2xl font-black text-[#6b3022]">{fmtPercent(resultado.datos.porcentaje)}</div>
-        </section>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_1.05fr]">
-        <section className={`${panel} flex min-h-0 flex-col gap-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8a6458]">Por local</div>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-[20px] border border-[#d8c0b9] bg-[rgba(255,250,248,0.72)]">
-            <div className="divide-y divide-[#ead7d1]">
-              {resultado.datos.porLocal.map((row) => (
-                <div
-                  key={row.local}
-                  className="grid gap-2 px-4 py-3 text-sm text-[#4b332d] xl:grid-cols-[1fr_0.85fr_0.9fr_0.9fr_0.9fr_0.9fr_0.7fr]"
-                >
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Local</div><div className="mt-1 font-black">{row.local}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Caja</div><div className="mt-1">{fmtMoney(row.caja)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Directo</div><div className="mt-1">{fmtMoney(row.directo)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Emitidas</div><div className="mt-1">{fmtMoney(row.emitidas)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Empresa</div><div className="mt-1">{fmtMoney(row.empresa)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Neto</div><div className="mt-1 font-black">{fmtMoney(row.neto)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">% / Caja</div><div className="mt-1 font-black">{fmtPercent(row.porcentaje)}</div></div>
-                </div>
-              ))}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <article
+          ref={reportRef}
+          className="print-report mx-auto w-full max-w-[210mm] rounded-[28px] border border-[#d9c2ba] bg-[linear-gradient(180deg,#fffdfa_0%,#f7efeb_100%)] p-8 text-[#402a24] shadow-[0_20px_50px_rgba(85,52,46,0.10)]"
+        >
+          <header className="border-b border-[#e5d2cb] pb-6">
+            <div className="text-center text-[11px] font-black uppercase tracking-[0.22em] text-[#8a6458]">
+              Consulta detalle
             </div>
-          </div>
-        </section>
+            <h1 className="mt-2 text-center text-3xl font-black tracking-tight text-[#3d2721]">
+              Informe de consulta
+            </h1>
 
-        <section className={`${panel} flex min-h-0 flex-col gap-3`}>
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8a6458]">Por tipo/fam/sub</div>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-[20px] border border-[#d8c0b9] bg-[rgba(255,250,248,0.72)]">
-            <div className="divide-y divide-[#ead7d1]">
-              {resultado.datos.detalleClasificacion.map((row) => (
-                <div
-                  key={row.key}
-                  className="grid gap-2 px-4 py-3 text-sm text-[#4b332d] xl:grid-cols-[0.9fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_0.65fr]"
-                >
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Tipo</div><div className="mt-1 font-black">{row.tipo}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Familia</div><div className="mt-1">{row.familia}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Sub</div><div className="mt-1">{row.subfamilia || "-"}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Bruto</div><div className="mt-1">{fmtMoney(row.gastoBruto)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Emitidas</div><div className="mt-1">{fmtMoney(row.emitidas)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">Neto</div><div className="mt-1 font-black">{fmtMoney(row.gastoNeto)}</div></div>
-                  <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b7f77]">IVA</div><div className="mt-1">{fmtMoney(row.iva)}</div></div>
+            <div className="mt-5 grid gap-3 text-sm xl:grid-cols-4">
+              <div className="rounded-2xl border border-[#e7d5ce] bg-[rgba(255,250,247,0.86)] px-4 py-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Locales
                 </div>
+                <div className="mt-1 text-base font-bold text-[#462f28]">{localesCabecera}</div>
+              </div>
+              <div className="rounded-2xl border border-[#e7d5ce] bg-[rgba(255,250,247,0.86)] px-4 py-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Desde
+                </div>
+                <div className="mt-1 text-base font-bold text-[#462f28]">
+                  {fmtDate(initialState.desde)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#e7d5ce] bg-[rgba(255,250,247,0.86)] px-4 py-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Hasta
+                </div>
+                <div className="mt-1 text-base font-bold text-[#462f28]">
+                  {fmtDate(initialState.hasta)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#e7d5ce] bg-[rgba(255,250,247,0.86)] px-4 py-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Caja
+                </div>
+                <div className="mt-1 text-base font-bold text-[#462f28]">
+                  {fmtMoney(resultado.datos.cajaUsada)}
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <section className="mt-8">
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#8a6458]">
+              Tipos y familias
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-[22px] border border-[#e2cfc8] bg-[rgba(255,251,248,0.9)]">
+              {detalleTipos.map((bloque, index) => (
+                <section
+                  key={bloque.tipo}
+                  className={index === 0 ? "" : "border-t border-[#ead9d3]"}
+                >
+                  <div className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-center gap-3 bg-[rgba(243,231,224,0.9)] px-5 py-4">
+                    <div className="text-base font-black uppercase tracking-[0.16em] text-[#6e4a40]">
+                      {bloque.tipo}
+                    </div>
+                    <div className="text-right text-base font-black text-[#432c26]">
+                      {fmtMoney(bloque.total)}
+                    </div>
+                    <div className="text-right text-sm font-black text-[#8a5144]">
+                      {fmtPercent(bloque.porcentaje)}
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-[#f0e3de]">
+                    {bloque.familias.map((familia) => (
+                      <div
+                        key={`${bloque.tipo}-${familia.familia}`}
+                        className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-center gap-3 px-5 py-3 text-sm text-[#4b332d]"
+                      >
+                        <div className="pl-6 font-medium text-[#60453d]">{familia.familia}</div>
+                        <div className="text-right font-semibold">{fmtMoney(familia.importe)}</div>
+                        <div className="text-right font-semibold text-[#8a6458]">
+                          {fmtPercent(familia.porcentaje)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
-          </div>
-        </section>
+          </section>
+
+          <footer className="mt-8 border-t border-[#e5d2cb] pt-6">
+            <div className="grid gap-3 xl:grid-cols-3">
+              <div className="rounded-2xl border border-[#e2cfc8] bg-[rgba(255,250,247,0.88)] px-5 py-4 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Caja total
+                </div>
+                <div className="mt-2 text-2xl font-black text-[#432c26]">
+                  {fmtMoney(resultado.datos.cajaUsada)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#e2cfc8] bg-[rgba(255,250,247,0.88)] px-5 py-4 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]">
+                  Gasto total
+                </div>
+                <div className="mt-2 text-2xl font-black text-[#432c26]">
+                  {fmtMoney(resultado.datos.gastoNeto)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f2d8cf_0%,#e8c0b3_100%)] px-5 py-4 text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#884b3d]">
+                  %
+                </div>
+                <div className="mt-2 text-2xl font-black text-[#6b3022]">
+                  {fmtPercent(resultado.datos.porcentaje)}
+                </div>
+              </div>
+            </div>
+          </footer>
+        </article>
       </div>
     </section>
   );
