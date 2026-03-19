@@ -41,6 +41,33 @@ body {
     linear-gradient(180deg, #ede4d8 0%, #ddd1c3 52%, #d3c5b5 100%);
 }
 
+.app-shell a,
+.app-shell button,
+.app-shell [role="button"],
+.app-shell summary,
+.app-shell label:has(input[type="checkbox"]),
+.app-shell label:has(input[type="radio"]) {
+  cursor: pointer;
+}
+
+.app-shell input,
+.app-shell textarea,
+.app-shell select {
+  cursor: text;
+}
+
+.app-shell select {
+  cursor: pointer;
+}
+
+.app-shell button:disabled,
+.app-shell input:disabled,
+.app-shell textarea:disabled,
+.app-shell select:disabled,
+.app-shell [aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 .app-frame {
   display: flex;
   height: 100%;
@@ -79,4 +106,14 @@ body {
 
 .page-body > * {
   height: 100%;
+}
+
+[data-readonly-lock="true"] input,
+[data-readonly-lock="true"] select,
+[data-readonly-lock="true"] textarea {
+  pointer-events: none;
+  opacity: 0.68;
+  filter: grayscale(0.08);
+  background: #f4efea !important;
+  cursor: not-allowed !important;
 }

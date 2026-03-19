@@ -16,6 +16,10 @@ import {
 import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
+import {
+  listarRepartosRiverocioManuales,
+  type RepartoRiverocioManual,
+} from "@/modules/consultas/utils/reparto-riverocio";
 
 type PantallaConsultasDetalleProps = {
   clasificacion: ClasificacionMapa;
@@ -75,6 +79,7 @@ export function PantallaConsultasDetalle({
   initialState,
 }: PantallaConsultasDetalleProps) {
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
+  const [repartosRiverocio, setRepartosRiverocio] = useState<RepartoRiverocioManual[]>([]);
   const reportRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -82,9 +87,13 @@ export function PantallaConsultasDetalle({
 
     const cargar = async () => {
       try {
-        const data = await cargarOperativaConsultas(clasificacion);
+        const [data, repartos] = await Promise.all([
+          cargarOperativaConsultas(clasificacion),
+          listarRepartosRiverocioManuales(),
+        ]);
         if (!cancelado) {
           setOperativa(data);
+          setRepartosRiverocio(repartos);
         }
       } catch (error) {
         console.error("No se pudo cargar la operativa para el detalle de consultas", error);
@@ -105,8 +114,9 @@ export function PantallaConsultasDetalle({
         maestros,
         operativa,
         state: initialState,
+        repartosRiverocio,
       }),
-    [clasificacion, maestros, operativa, initialState]
+    [clasificacion, maestros, operativa, initialState, repartosRiverocio]
   );
 
   const volverHref = useMemo(() => {
@@ -229,12 +239,15 @@ export function PantallaConsultasDetalle({
     URL.revokeObjectURL(url);
   };
 
-  const abrirVentanaImpresion = (title: string) => {
+  const abrirVentanaImpresion = async (title: string) => {
     const reportNode = reportRef.current;
     if (!reportNode) return;
 
     const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
-    if (!popup) return;
+    if (!popup) {
+      window.alert("No se pudo abrir la ventana de impresion. Revisa si el navegador bloqueo el popup.");
+      return;
+    }
 
     const estilosHead = Array.from(
       document.head.querySelectorAll('style, link[rel="stylesheet"]')
@@ -259,6 +272,11 @@ export function PantallaConsultasDetalle({
       body {
         padding: 16px;
       }
+      .print-report {
+        width: 100%;
+        max-width: 210mm;
+        margin: 0 auto;
+      }
       @page {
         size: A4;
         margin: 12mm;
@@ -270,17 +288,33 @@ export function PantallaConsultasDetalle({
         body {
           padding: 0;
         }
+        .print-report {
+          border: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+        }
       }
     </style>
   </head>
   <body>
     ${reportNode.outerHTML}
     <script>
-      window.addEventListener('load', () => {
+      const imprimir = async () => {
+        try {
+          if (document.fonts && document.fonts.ready) {
+            await document.fonts.ready;
+          }
+        } catch {}
         setTimeout(() => {
           window.focus();
           window.print();
-        }, 150);
+        }, 200);
+      };
+      window.addEventListener('load', () => {
+        void imprimir();
+      });
+      window.addEventListener('afterprint', () => {
+        window.close();
       });
     </script>
   </body>
@@ -300,14 +334,14 @@ export function PantallaConsultasDetalle({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => void abrirVentanaImpresion("consulta-detalle")}
             className="rounded-2xl border border-[#d0b1a4] bg-[linear-gradient(180deg,#fbf3ef_0%,#efe1da_100%)] px-4 py-2 text-sm font-bold text-[#6a4b43]"
           >
             Imprimir
           </button>
           <button
             type="button"
-            onClick={() => abrirVentanaImpresion("consulta-detalle-pdf")}
+            onClick={() => void abrirVentanaImpresion("consulta-detalle-pdf")}
             className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2 text-sm font-black text-[#5a3025]"
           >
             Exportar PDF

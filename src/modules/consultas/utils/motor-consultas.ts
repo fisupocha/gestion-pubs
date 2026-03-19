@@ -3,6 +3,7 @@
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
+import type { RepartoRiverocioManual } from "@/modules/consultas/utils/reparto-riverocio";
 
 export type RegistroBase = {
   id: number;
@@ -208,7 +209,7 @@ function mkMovimiento(
   } satisfies Movimiento;
 }
 
-function obtenerMovimientos(
+export function obtenerMovimientosConsulta(
   clasificacion: ClasificacionMapa,
   operativa: OperativaConsultaData
 ) {
@@ -248,7 +249,7 @@ export function obtenerLocalesDisponibles(
   clasificacion: ClasificacionMapa,
   operativa: OperativaConsultaData
 ) {
-  const movimientos = obtenerMovimientos(clasificacion, operativa);
+  const movimientos = obtenerMovimientosConsulta(clasificacion, operativa);
   return [
     ...new Set([...maestros.locales, ...movimientos.map((item) => item.local)].filter(Boolean)),
   ];
@@ -306,13 +307,15 @@ export function calcularConsulta({
   maestros,
   operativa,
   state,
+  repartosRiverocio = [],
 }: {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
   operativa: OperativaConsultaData;
   state: ConsultaState;
+  repartosRiverocio?: RepartoRiverocioManual[];
 }) {
-  const movimientos = obtenerMovimientos(clasificacion, operativa);
+  const movimientos = obtenerMovimientosConsulta(clasificacion, operativa);
   const localesDisponibles = [
     ...new Set([...maestros.locales, ...movimientos.map((item) => item.local)].filter(Boolean)),
   ];
@@ -332,6 +335,7 @@ export function calcularConsulta({
     localesSeleccionadosOperativos.length > 0 && !empresaSeleccionada;
   const locales = state.localesSeleccionados.length > 0 ? state.localesSeleccionados : localesDisponibles;
   const setLocales = new Set(locales);
+  const setLocalesSeleccionadosOperativos = new Set(localesSeleccionadosOperativos);
   const importe = (item: Movimiento) =>
     state.modoIva === "con" ? item.conIva : item.sinIva;
   const ingresosActivo = state.tiposSeleccionados.includes(TIPO_INGRESOS);
@@ -404,6 +408,9 @@ export function calcularConsulta({
   const ivaGasto = round2(gastosSel.reduce((acc, item) => acc + item.iva, 0));
   const ivaEmitidas = round2(emitidasSel.reduce((acc, item) => acc + item.iva, 0));
   const bruto = round2(gastosSel.reduce((acc, item) => acc + importe(item), 0));
+  const repartoRiverocioMap = new Map(
+    repartosRiverocio.map((item) => [item.movimientoId, item])
+  );
 
   const porLocal = new Map<string, ResumenLocal>();
   locales.forEach((local) => {
@@ -432,32 +439,62 @@ export function calcularConsulta({
     if (row) row.emitidas = round2(row.emitidas + importe(item));
   });
 
-  const netoEmpresa = round2(
-    gastosEmpresa.reduce((acc, item) => acc + importe(item), 0) -
-      emitidasEmpresa.reduce((acc, item) => acc + importe(item), 0)
-  );
   const cajaOperativa = round2(
     cajasRepartoEmpresa.reduce((acc, item) => acc + importe(item), 0)
   );
-  const cajaSeleccionOperativa = round2(
-    cajasRepartoEmpresa
-      .filter((item) => setLocales.has(item.local))
-      .reduce((acc, item) => acc + importe(item), 0)
-  );
-  const factorRepartoDetalle =
-    aplicarReparto && cajaOperativa > 0 ? cajaSeleccionOperativa / cajaOperativa : 1;
+  const cajaPorLocal = new Map<string, number>();
+  cajasRepartoEmpresa.forEach((item) => {
+    cajaPorLocal.set(item.local, round2((cajaPorLocal.get(item.local) ?? 0) + importe(item)));
+  });
+
+  function construirRepartoAutomatico(total: number) {
+    const reparto = new Map<string, number>();
+
+    if (cajaOperativa <= 0) {
+      localesOperativosNegocio.forEach((local) => reparto.set(local, 0));
+      return reparto;
+    }
+
+    localesOperativosNegocio.forEach((local) => {
+      const peso = (cajaPorLocal.get(local) ?? 0) / cajaOperativa;
+      reparto.set(local, round2(total * peso));
+    });
+
+    return reparto;
+  }
+
+  function construirRepartoManual(item: Movimiento, total: number) {
+    const configuracion = repartoRiverocioMap.get(item.id);
+    if (!configuracion) {
+      return null;
+    }
+
+    const reparto = new Map<string, number>();
+    localesOperativosNegocio.forEach((local) => {
+      const porcentaje = Number(configuracion.porcentajes[local] ?? 0);
+      reparto.set(local, round2(total * (porcentaje / 100)));
+    });
+    return reparto;
+  }
+
+  function construirRepartoEmpresa(item: Movimiento, total: number) {
+    return construirRepartoManual(item, total) ?? construirRepartoAutomatico(total);
+  }
 
   if (aplicarReparto) {
-    if (cajaOperativa > 0) {
-      const cajaPorLocal = new Map<string, number>();
-      cajasRepartoEmpresa.forEach((item) => {
-        cajaPorLocal.set(item.local, round2((cajaPorLocal.get(item.local) ?? 0) + importe(item)));
-      });
+    gastosEmpresa.forEach((item) => {
+      const reparto = construirRepartoEmpresa(item, importe(item));
       [...porLocal.values()].forEach((row) => {
-        const cajaLocal = cajaPorLocal.get(row.local) ?? 0;
-        row.empresa = round2(netoEmpresa * (cajaLocal / cajaOperativa));
+        row.empresa = round2(row.empresa + (reparto.get(row.local) ?? 0));
       });
-    }
+    });
+
+    emitidasEmpresa.forEach((item) => {
+      const reparto = construirRepartoEmpresa(item, importe(item));
+      [...porLocal.values()].forEach((row) => {
+        row.empresa = round2(row.empresa - (reparto.get(row.local) ?? 0));
+      });
+    });
   } else {
     const localEmpresa = [...porLocal.keys()].find((item) => esLocalEmpresa(item));
     const row = localEmpresa ? porLocal.get(localEmpresa) : undefined;
@@ -507,9 +544,24 @@ export function calcularConsulta({
       gastoNeto: 0,
       iva: 0,
     };
-    const factor = item.esEmpresa ? factorRepartoDetalle : 1;
-    row.gastoBruto = round2(row.gastoBruto + importe(item) * factor);
-    row.iva = round2(row.iva + item.iva * factor);
+    const importeVisible = item.esEmpresa && aplicarReparto
+      ? round2(
+          [...setLocalesSeleccionadosOperativos].reduce(
+            (acc, local) => acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
+            0
+          )
+        )
+      : importe(item);
+    const ivaVisible = item.esEmpresa && aplicarReparto
+      ? round2(
+          [...setLocalesSeleccionadosOperativos].reduce(
+            (acc, local) => acc + (construirRepartoEmpresa(item, item.iva).get(local) ?? 0),
+            0
+          )
+        )
+      : item.iva;
+    row.gastoBruto = round2(row.gastoBruto + importeVisible);
+    row.iva = round2(row.iva + ivaVisible);
     detalleMap.set(key, row);
   });
   emitidasSel.forEach((item) => {
@@ -524,8 +576,15 @@ export function calcularConsulta({
       gastoNeto: 0,
       iva: 0,
     };
-    const factor = item.esEmpresa ? factorRepartoDetalle : 1;
-    row.emitidas = round2(row.emitidas + importe(item) * factor);
+    const emitidasVisibles = item.esEmpresa && aplicarReparto
+      ? round2(
+          [...setLocalesSeleccionadosOperativos].reduce(
+            (acc, local) => acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
+            0
+          )
+        )
+      : importe(item);
+    row.emitidas = round2(row.emitidas + emitidasVisibles);
     detalleMap.set(key, row);
   });
 

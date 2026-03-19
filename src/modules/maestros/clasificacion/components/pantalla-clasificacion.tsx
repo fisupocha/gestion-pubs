@@ -46,10 +46,10 @@ const bloqueClassName =
   "rounded-[22px] border border-[#d1a79d] bg-[linear-gradient(180deg,rgba(248,240,237,0.99)_0%,rgba(237,223,219,0.99)_100%)] p-3 shadow-[0_14px_28px_rgba(85,52,46,0.09)]";
 
 const inputClassName =
-  "w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-center text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_4px_10px_rgba(85,52,46,0.04)] outline-none transition placeholder:text-[#a78f88] focus:border-[#c18173] focus:bg-white focus:shadow-[0_0_0_3px_rgba(193,129,115,0.14)]";
+  "w-full rounded-2xl border border-[#d2aca3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-center text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.06)] outline-none transition duration-150 placeholder:text-[#a78f88] hover:-translate-y-[1px] hover:border-[#c58f82] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_24px_rgba(85,52,46,0.10)] focus:-translate-y-[1px] focus:border-[#b97263] focus:bg-white focus:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_14px_26px_rgba(85,52,46,0.11)]";
 
 const accionClassName =
-  "min-w-0 flex-1 rounded-2xl border border-[#cfafa8] bg-[linear-gradient(180deg,#fbf7f6_0%,#e8dbd8_100%)] px-3 py-2 text-[14px] font-semibold text-[#492f29] shadow-[0_10px_16px_rgba(85,52,46,0.08)] transition hover:bg-[#f4edeb]";
+  "min-w-0 flex-1 rounded-2xl border border-[#cfafa8] bg-[linear-gradient(180deg,#fbf7f6_0%,#e8dbd8_100%)] px-3 py-2 text-[14px] font-semibold text-[#492f29] shadow-[0_10px_16px_rgba(85,52,46,0.08)] transition duration-150 hover:-translate-y-[1px] hover:border-[#c28779] hover:bg-[linear-gradient(180deg,#fffdfc_0%,#eedfda_100%)] hover:shadow-[0_14px_24px_rgba(85,52,46,0.14)] focus-visible:-translate-y-[1px] focus-visible:border-[#b97263] focus-visible:bg-[linear-gradient(180deg,#fffdfc_0%,#f0e2dc_100%)] focus-visible:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_16px_28px_rgba(85,52,46,0.15)] focus-visible:outline-none";
 
 const accionDeshabilitadaClassName =
   "min-w-0 flex-1 cursor-not-allowed rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fcf9f8_0%,#efe6e3_100%)] px-3 py-2 text-[14px] font-semibold text-[#96817b] opacity-70 shadow-none";
@@ -269,7 +269,7 @@ export function PantallaClasificacion({
                     type="text"
                     value={textoBusquedaTipo}
                     onChange={(e) => setTextoBusquedaTipo(e.target.value)}
-                    className="w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none"
+                    className="w-full rounded-2xl border border-[#d2aca3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.06)] outline-none transition duration-150 hover:-translate-y-[1px] hover:border-[#c58f82] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_24px_rgba(85,52,46,0.10)] focus:-translate-y-[1px] focus:border-[#b97263] focus:bg-white focus:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_14px_26px_rgba(85,52,46,0.11)]"
                     placeholder="Nombre del tipo"
                   />
                 </label>
@@ -297,8 +297,8 @@ export function PantallaClasificacion({
                           onClick={() => seleccionarTipo(tipo)}
                           className={
                             seleccionado
-                              ? "flex w-full items-center justify-between bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28]"
-                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition hover:bg-[rgba(232,214,206,0.44)]"
+                              ? "flex w-full items-center justify-between border-l-4 border-[#bd7f72] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition duration-150 hover:bg-[rgba(232,214,206,0.6)] hover:shadow-[inset_4px_0_0_#d2a39a]"
                           }
                         >
                           <span className="font-semibold">{tipo.nombre}</span>
@@ -384,7 +384,7 @@ export function PantallaClasificacion({
                     type="text"
                     value={textoBusquedaFamilia}
                     onChange={(e) => setTextoBusquedaFamilia(e.target.value)}
-                    className="w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none"
+                    className="w-full rounded-2xl border border-[#d2aca3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.06)] outline-none transition duration-150 hover:-translate-y-[1px] hover:border-[#c58f82] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_24px_rgba(85,52,46,0.10)] focus:-translate-y-[1px] focus:border-[#b97263] focus:bg-white focus:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_14px_26px_rgba(85,52,46,0.11)]"
                     placeholder="Nombre de la familia"
                     disabled={tipoSeleccionadoId === null}
                   />
@@ -417,8 +417,8 @@ export function PantallaClasificacion({
                           onClick={() => seleccionarFamilia(familia)}
                           className={
                             seleccionado
-                              ? "flex w-full items-center justify-between bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28]"
-                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition hover:bg-[rgba(232,214,206,0.44)]"
+                              ? "flex w-full items-center justify-between border-l-4 border-[#bd7f72] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition duration-150 hover:bg-[rgba(232,214,206,0.6)] hover:shadow-[inset_4px_0_0_#d2a39a]"
                           }
                         >
                           <span className="font-semibold">{familia.nombre}</span>
@@ -510,7 +510,7 @@ export function PantallaClasificacion({
                     type="text"
                     value={textoBusquedaSubfamilia}
                     onChange={(e) => setTextoBusquedaSubfamilia(e.target.value)}
-                    className="w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none"
+                    className="w-full rounded-2xl border border-[#d2aca3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.06)] outline-none transition duration-150 hover:-translate-y-[1px] hover:border-[#c58f82] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_24px_rgba(85,52,46,0.10)] focus:-translate-y-[1px] focus:border-[#b97263] focus:bg-white focus:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_14px_26px_rgba(85,52,46,0.11)]"
                     placeholder="Nombre de la subfamilia"
                     disabled={familiaSeleccionadaId === null}
                   />
@@ -543,8 +543,8 @@ export function PantallaClasificacion({
                           onClick={() => seleccionarSubfamilia(subfamilia)}
                           className={
                             seleccionado
-                              ? "flex w-full items-center justify-between bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28]"
-                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition hover:bg-[rgba(232,214,206,0.44)]"
+                              ? "flex w-full items-center justify-between border-l-4 border-[#bd7f72] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-left text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+                              : "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-[#3f2c28] transition duration-150 hover:bg-[rgba(232,214,206,0.6)] hover:shadow-[inset_4px_0_0_#d2a39a]"
                           }
                         >
                           <span className="font-semibold">{subfamilia.nombre}</span>

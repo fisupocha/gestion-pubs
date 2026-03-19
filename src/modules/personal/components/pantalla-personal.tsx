@@ -194,13 +194,16 @@ function Campo({
 }
 
 const inputClassName =
-  "w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-center text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.05)] outline-none transition placeholder:text-[#a78f88] focus:border-[#c18173] focus:bg-white focus:shadow-[0_0_0_3px_rgba(193,129,115,0.14)] 2xl:py-2.5";
+  "w-full rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 text-center text-sm text-[#173138] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)] outline-none transition duration-150 placeholder:text-[#789198] hover:-translate-y-[1px] hover:scale-[1.005] hover:border-[#3d6d77] hover:bg-[#ffffff] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_22px_38px_rgba(45,63,68,0.20)] focus:border-[#244d57] focus:bg-white focus:shadow-[0_0_0_6px_rgba(95,142,152,0.28),0_24px_42px_rgba(45,63,68,0.22)] 2xl:py-2.5";
 
 const accionClassName =
-  "min-w-[54px] rounded-2xl border border-[#d1b6ae] bg-[linear-gradient(180deg,#fdf9f8_0%,#ede1dd_100%)] px-3 py-2 text-center text-sm font-semibold text-[#492f29] shadow-[0_10px_18px_rgba(85,52,46,0.09)] transition hover:border-[#bd897d] hover:bg-[#f7f0ee] 2xl:min-w-[60px] 2xl:py-2.5";
+  "min-w-[54px] rounded-2xl border border-[#d1b6ae] bg-[linear-gradient(180deg,#fdf9f8_0%,#ede1dd_100%)] px-3 py-2 text-center text-sm font-semibold text-[#492f29] shadow-[0_10px_18px_rgba(85,52,46,0.09)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#904939] hover:bg-[#fff9f8] hover:shadow-[0_22px_36px_rgba(85,52,46,0.22)] active:translate-y-0 active:scale-100 2xl:min-w-[60px] 2xl:py-2.5";
 
 const campoDeshabilitadoClassName =
-  "cursor-not-allowed border-[#dcc8c2] bg-[linear-gradient(180deg,#fcf9f8_0%,#efe6e3_100%)] text-[#96817b] shadow-none opacity-70";
+  "pointer-events-none cursor-not-allowed appearance-none !border-[#ccd6d9] !bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] !text-[#5e747b] !shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] opacity-100 hover:translate-y-0 hover:scale-100 hover:!border-[#ccd6d9] hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] focus:!border-[#ccd6d9] focus:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] focus:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
+
+const campoDependienteDeshabilitadoClassName =
+  "disabled:pointer-events-none disabled:cursor-not-allowed disabled:appearance-none disabled:!border-[#ccd6d9] disabled:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:!text-[#5e747b] disabled:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] disabled:opacity-100 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:!border-[#ccd6d9] disabled:hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
 
 export function PantallaPersonal({
   proveedores = [],
@@ -291,12 +294,12 @@ export function PantallaPersonal({
         setRegistros(persistidos as RegistroFactura[]);
 
         if (persistidos.length > 0) {
-          const ultimo = persistidos[persistidos.length - 1] as RegistroFactura;
+          const inicial = crearFormularioInicial(tipoPersonalId);
           setIndiceActual(persistidos.length - 1);
-          setModoNuevo(false);
-          setFormulario(formularioDesdeRegistro(ultimo));
-          setArchivoAdjunto(ultimo.adjunto);
-          setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
+          setModoNuevo(true);
+          setFormulario(inicial);
+          setArchivoAdjunto(null);
+          setSnapshotInicial(crearSnapshot(inicial, null));
         } else {
           const inicial = crearFormularioInicial(tipoPersonalId);
           setIndiceActual(0);
@@ -920,7 +923,7 @@ export function PantallaPersonal({
                 </select>
               </Campo>
 
-              <Campo label="Fecha">
+              <Campo label="Fecha fact.">
                 <CampoFecha
                   ref={fechaFacturaRef}
                   value={formulario.fechaFactura}
@@ -957,7 +960,7 @@ export function PantallaPersonal({
                   value={formulario.familia}
                   onChange={(e) => cambiarFamilia(e.target.value)}
                   disabled={!formulario.tipo}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona familia</option>
                   {familiasDisponibles.map((item) => (
@@ -973,7 +976,7 @@ export function PantallaPersonal({
                   value={formulario.subfamilia}
                   onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
                   disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">
                     {!formulario.familia
@@ -1180,7 +1183,7 @@ export function PantallaPersonal({
             </div>
 
             <div className="mt-2 grid gap-2 2xl:mt-2.5 2xl:gap-2.5">
-              <Campo label="Fecha">
+              <Campo label="Fecha de pago">
                 <input
                   ref={fechaPagoRef}
                   value={formulario.fechaPago}
@@ -1244,12 +1247,12 @@ export function PantallaPersonal({
                 />
               </Campo>
 
-              <div className="rounded-2xl border border-[#d1a79d] bg-[linear-gradient(180deg,#f7efed_0%,#e8dcd9_100%)] px-3 py-2 shadow-[0_10px_18px_rgba(85,52,46,0.08)]">
-                <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#8a6458]">
+              <div className="rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)]">
+                <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#60767b]">
                   Adjunto
                 </div>
 
-                <div className="mt-1 truncate text-center text-[11px] font-medium text-[#766660]">
+                <div className="mt-1 truncate text-center text-[11px] font-medium text-[#62757a]">
                   {archivoAdjunto ? archivoAdjunto.file.name : "Sin archivo adjunto"}
                 </div>
 

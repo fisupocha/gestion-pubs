@@ -1,7 +1,11 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  ResumenAccesoMenu,
+  useAccesoApp,
+} from "@/components/acceso/control-acceso-app";
 import {
   itemConsultas,
   itemsMaestros,
@@ -73,7 +77,9 @@ function MenuBox({
             {titulo}
           </span>
 
-          <span className="text-[12px] font-black text-[#c7ae8d]">{abierto ? "-" : "+"}</span>
+          <span className="text-[12px] font-black text-[#c7ae8d]">
+            {abierto ? "-" : "+"}
+          </span>
         </button>
       ) : (
         <div className="mb-1 px-1 text-center text-[9px] font-black uppercase tracking-[0.24em] text-[#c7ae8d]">
@@ -101,6 +107,23 @@ function MenuBox({
 
 export function MenuLateral() {
   const pathname = usePathname();
+  const acceso = useAccesoApp();
+
+  if (pathname === "/consultas/reparto-riverocio") {
+    return null;
+  }
+
+  const itemsOperativaVisibles = acceso.esAdmin
+    ? itemsOperativa
+    : itemsOperativa.filter(
+        (item) =>
+          item.href === "/facturas-recibidas" ||
+          item.href === "/alquileres" ||
+          item.href === "/gastos-bancarios" ||
+          item.href === "/creditos" ||
+          item.href === "/impuestos" ||
+          item.href === "/facturas-emitidas"
+      );
 
   return (
     <aside className="w-full md:h-full md:min-h-0 md:w-[256px] md:flex-none">
@@ -109,10 +132,10 @@ export function MenuLateral() {
           <div className="flex-1 min-h-0">
             <MenuBox
               titulo="Operativa"
-              items={itemsOperativa}
+              items={itemsOperativaVisibles}
               pathname={pathname}
               className="flex h-full flex-col"
-              itemsClassName="grid h-full grid-rows-9 gap-0.5"
+              itemsClassName="grid h-full gap-0.5"
               itemClassName=""
             />
           </div>
@@ -126,16 +149,20 @@ export function MenuLateral() {
               itemClassName="min-h-[40px]"
             />
 
-            <Link
-              href={itemConsultas.href}
-              className={
-                pathname === itemConsultas.href
-                  ? "block rounded-xl border border-[#d2b085] bg-[linear-gradient(180deg,#fff2d7_0%,#dfbf95_100%)] px-3 py-2.5 text-center text-[14px] font-black text-[#1f1612] shadow-[0_10px_20px_rgba(17,12,9,0.18)]"
-                  : "block rounded-xl border border-[#5e4638] bg-[linear-gradient(180deg,#3a2b23_0%,#2b2019_100%)] px-3 py-2.5 text-center text-[14px] font-black text-[#f3e6d7] shadow-[0_8px_16px_rgba(14,10,8,0.18)] transition hover:bg-[linear-gradient(180deg,#433128_0%,#32241d_100%)]"
-              }
-            >
-              {itemConsultas.label}
-            </Link>
+            {acceso.esAdmin ? (
+              <Link
+                href={itemConsultas.href}
+                className={
+                  pathname === itemConsultas.href
+                    ? "block rounded-xl border border-[#d2b085] bg-[linear-gradient(180deg,#fff2d7_0%,#dfbf95_100%)] px-3 py-2.5 text-center text-[14px] font-black text-[#1f1612] shadow-[0_10px_20px_rgba(17,12,9,0.18)]"
+                    : "block rounded-xl border border-[#5e4638] bg-[linear-gradient(180deg,#3a2b23_0%,#2b2019_100%)] px-3 py-2.5 text-center text-[14px] font-black text-[#f3e6d7] shadow-[0_8px_16px_rgba(14,10,8,0.18)] transition hover:bg-[linear-gradient(180deg,#433128_0%,#32241d_100%)]"
+                }
+              >
+                {itemConsultas.label}
+              </Link>
+            ) : null}
+
+            <ResumenAccesoMenu />
           </div>
         </nav>
       </div>

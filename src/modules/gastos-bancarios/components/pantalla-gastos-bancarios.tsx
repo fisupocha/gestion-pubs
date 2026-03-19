@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
@@ -67,7 +68,10 @@ function crearFormularioInicial(formaPago = "", banco = ""): FormularioFactura {
   };
 }
 
-function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
+function formularioDesdeRegistro(
+  registro: RegistroFactura,
+  valoresFijos?: { formaPago: string }
+): FormularioFactura {
   return {
     empresa: registro.empresa,
     proveedor: registro.proveedor,
@@ -82,7 +86,7 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     base21: registro.base21,
     pagado: true,
     fechaPago: registro.fechaFactura,
-    formaPago: registro.formaPago,
+    formaPago: registro.formaPago || valoresFijos?.formaPago || "",
     banco: registro.banco,
     numeroPagare: registro.numeroPagare,
     observaciones: registro.observaciones,
@@ -194,16 +198,22 @@ function Campo({
 }
 
 const inputClassName =
-  "w-full rounded-2xl border border-[#b7c7ca] bg-[linear-gradient(180deg,#fbfdfd_0%,#edf2f3_100%)] px-3 py-2 text-center text-sm text-[#1f2e31] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(45,63,68,0.05)] outline-none transition placeholder:text-[#8b9ea3] focus:border-[#5f8e98] focus:bg-white focus:shadow-[0_0_0_3px_rgba(95,142,152,0.14)] 2xl:py-2.5";
+  "w-full rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 text-center text-sm text-[#173138] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)] outline-none transition duration-150 placeholder:text-[#789198] hover:-translate-y-[1px] hover:scale-[1.005] hover:border-[#3d6d77] hover:bg-[#ffffff] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_22px_38px_rgba(45,63,68,0.20)] focus:border-[#244d57] focus:bg-white focus:shadow-[0_0_0_6px_rgba(95,142,152,0.28),0_24px_42px_rgba(45,63,68,0.22)] 2xl:py-2.5";
 
 const accionClassName =
-  "min-w-[54px] rounded-2xl border border-[#adbec2] bg-[linear-gradient(180deg,#f8fbfb_0%,#dfe7e8_100%)] px-3 py-2 text-center text-sm font-semibold text-[#25383c] shadow-[0_10px_18px_rgba(45,63,68,0.10)] transition hover:border-[#73939a] hover:bg-[#f0f5f6] 2xl:min-w-[60px] 2xl:py-2.5";
+  "min-w-[54px] rounded-2xl border border-[#adbec2] bg-[linear-gradient(180deg,#f8fbfb_0%,#dfe7e8_100%)] px-3 py-2 text-center text-sm font-semibold text-[#25383c] shadow-[0_10px_18px_rgba(45,63,68,0.10)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#365a62] hover:bg-[#f5fbfc] hover:shadow-[0_22px_36px_rgba(45,63,68,0.22)] active:translate-y-0 active:scale-100 2xl:min-w-[60px] 2xl:py-2.5";
 
 const campoDeshabilitadoClassName =
-  "cursor-not-allowed border-[#cfdadd] bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] text-[#7f9094] shadow-none opacity-70";
+  "pointer-events-none cursor-not-allowed appearance-none !border-[#ccd6d9] !bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] !text-[#5e747b] !shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] opacity-100 hover:translate-y-0 hover:scale-100 hover:!border-[#ccd6d9] hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] focus:!border-[#ccd6d9] focus:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] focus:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
 
 const tarjetaDeshabilitadaClassName =
-  "rounded-2xl border border-[#cfdadd] bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] px-3.5 py-1.5 text-center opacity-70 shadow-none 2xl:px-4 2xl:py-2";
+  "rounded-2xl border border-[#d2dde0] bg-[linear-gradient(180deg,#dde5e7_0%,#c9d3d7_100%)] px-3.5 py-1.5 text-center opacity-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] 2xl:px-4 2xl:py-2";
+
+const campoDependienteDeshabilitadoClassName =
+  "disabled:pointer-events-none disabled:cursor-not-allowed disabled:appearance-none disabled:!border-[#ccd6d9] disabled:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:!text-[#5e747b] disabled:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] disabled:opacity-100 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:!border-[#ccd6d9] disabled:hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
+
+const campoFijoBloqueadoClassName =
+  "pointer-events-none cursor-not-allowed appearance-none !border-[#cfdadd] !bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] !text-[#7f9094] !shadow-none opacity-70 hover:translate-y-0 hover:scale-100 hover:!border-[#cfdadd] hover:!bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] hover:!shadow-none focus:!border-[#cfdadd] focus:!bg-[linear-gradient(180deg,#f8fbfb_0%,#e8eef0_100%)] focus:!shadow-none";
 
 export function PantallaGastosBancarios({
   proveedores = [],
@@ -214,6 +224,8 @@ export function PantallaGastosBancarios({
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
 }) {
+  const acceso = useAccesoApp();
+  const esGestoria = acceso.esGestoria;
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
   const opcionesProveedor = proveedores;
@@ -223,7 +235,6 @@ export function PantallaGastosBancarios({
     opcionesFormaPago.find((item) => item.localeCompare("BANCO", "es", { sensitivity: "base" }) === 0) ??
     opcionesFormaPago[0] ??
     "";
-  const bancoPorDefecto = opcionesBanco[0] ?? "";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -239,12 +250,10 @@ export function PantallaGastosBancarios({
   const [registros, setRegistros] = useState<RegistroFactura[]>(REGISTROS_PRUEBA);
   const [indiceActual, setIndiceActual] = useState(ultimoIndice);
   const [modoNuevo, setModoNuevo] = useState(true);
-  const [formulario, setFormulario] = useState<FormularioFactura>(() =>
-    crearFormularioInicial(formaPagoFija, bancoPorDefecto)
-  );
+  const [formulario, setFormulario] = useState<FormularioFactura>(() => crearFormularioInicial(formaPagoFija));
   const [archivoAdjunto, setArchivoAdjunto] = useState<AdjuntoTemporal>(null);
   const [snapshotInicial, setSnapshotInicial] = useState(() =>
-    crearSnapshot(crearFormularioInicial(formaPagoFija, bancoPorDefecto), null)
+    crearSnapshot(crearFormularioInicial(formaPagoFija), null)
   );
   const [dialogoSalida, setDialogoSalida] = useState<{
     abierto: boolean;
@@ -294,14 +303,14 @@ export function PantallaGastosBancarios({
         setRegistros(persistidos as RegistroFactura[]);
 
         if (persistidos.length > 0) {
-          const ultimo = persistidos[persistidos.length - 1] as RegistroFactura;
+          const inicial = crearFormularioInicial(formaPagoFija);
           setIndiceActual(persistidos.length - 1);
-          setModoNuevo(false);
-          setFormulario(formularioDesdeRegistro(ultimo));
-          setArchivoAdjunto(ultimo.adjunto);
-          setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
+          setModoNuevo(true);
+          setFormulario(inicial);
+          setArchivoAdjunto(null);
+          setSnapshotInicial(crearSnapshot(inicial, null));
         } else {
-          const inicial = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
+          const inicial = crearFormularioInicial(formaPagoFija);
           setIndiceActual(0);
           setModoNuevo(true);
           setFormulario(inicial);
@@ -320,7 +329,7 @@ export function PantallaGastosBancarios({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva, bancoPorDefecto, formaPagoFija]);
+  }, [clasificacionActiva, formaPagoFija]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -459,7 +468,9 @@ export function PantallaGastosBancarios({
       return;
     }
 
-    const nextFormulario = formularioDesdeRegistro(registro);
+    const nextFormulario = formularioDesdeRegistro(registro, {
+      formaPago: formaPagoFija,
+    });
     setIndiceActual(indice);
     setModoNuevo(false);
     setFormulario(nextFormulario);
@@ -472,7 +483,7 @@ export function PantallaGastosBancarios({
   }
 
   function abrirNuevoRegistro() {
-    const nextFormulario = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
+    const nextFormulario = crearFormularioInicial(formaPagoFija);
     setModoNuevo(true);
     setFormulario(nextFormulario);
     setArchivoAdjunto(null);
@@ -565,9 +576,12 @@ export function PantallaGastosBancarios({
           : siguientes.findIndex((registro) => registro.id === registroGuardado.id)
       );
       setModoNuevo(false);
-      setFormulario(formularioDesdeRegistro(registroGuardado));
+      const formularioGuardado = formularioDesdeRegistro(registroGuardado, {
+        formaPago: formaPagoFija,
+      });
+      setFormulario(formularioGuardado);
       setArchivoAdjunto(registroGuardado.adjunto);
-      setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(registroGuardado), registroGuardado.adjunto));
+      setSnapshotInicial(crearSnapshot(formularioGuardado, registroGuardado.adjunto));
     } catch {
       window.alert("No se pudo guardar el gasto bancario en BBDD.");
     }
@@ -667,6 +681,10 @@ export function PantallaGastosBancarios({
 
   function irRegistroSiguiente() {
     if (registros.length === 0) {
+      if (esGestoria) {
+        return;
+      }
+
       abrirNuevoRegistro();
       return;
     }
@@ -677,6 +695,10 @@ export function PantallaGastosBancarios({
 
     if (indiceActual < registros.length - 1) {
       solicitarDestino({ tipo: "registro", indice: indiceActual + 1 });
+      return;
+    }
+
+    if (esGestoria) {
       return;
     }
 
@@ -926,7 +948,7 @@ export function PantallaGastosBancarios({
                   value={formulario.proveedor}
                   disabled
                   aria-disabled="true"
-                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
+                  className={`${inputClassName} ${campoFijoBloqueadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
                   {opcionesProveedor.map((item) => (
@@ -937,7 +959,7 @@ export function PantallaGastosBancarios({
                 </select>
               </Campo>
 
-              <Campo label="Fecha">
+              <Campo label="Fecha fact.">
                 <CampoFecha
                   ref={fechaFacturaRef}
                   value={formulario.fechaFactura}
@@ -953,7 +975,7 @@ export function PantallaGastosBancarios({
                   disabled
                   aria-disabled="true"
                   type="text"
-                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
+                  className={`${inputClassName} ${campoDeshabilitadoClassName} text-[#667b80]`}
                 />
               </Campo>
             </div>
@@ -993,7 +1015,7 @@ export function PantallaGastosBancarios({
                   value={formulario.familia}
                   onChange={(e) => cambiarFamilia(e.target.value)}
                   disabled={!formulario.tipo}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona familia</option>
                   {familiasDisponibles.map((item) => (
@@ -1009,7 +1031,7 @@ export function PantallaGastosBancarios({
                   value={formulario.subfamilia}
                   onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
                   disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">
                     {!formulario.familia
@@ -1223,7 +1245,7 @@ export function PantallaGastosBancarios({
                   value={formaPagoFija}
                   disabled
                   aria-disabled="true"
-                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
+                  className={`${inputClassName} ${campoFijoBloqueadoClassName}`}
                 >
                   {opcionesFormaPago.map((item) => (
                     <option key={item} value={item}>
@@ -1269,7 +1291,7 @@ export function PantallaGastosBancarios({
                 />
               </Campo>
 
-              <div className="rounded-2xl border border-[#98adb2] bg-[linear-gradient(180deg,#eef4f5_0%,#d9e3e5_100%)] px-3 py-2 shadow-[0_10px_18px_rgba(45,63,68,0.08)]">
+              <div className="rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)]">
                 <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#60767b]">
                   Adjunto
                 </div>

@@ -1,5 +1,9 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
+import {
+  MarcoContenidoApp,
+  ProveedorAccesoApp,
+} from "@/components/acceso/control-acceso-app";
 import { MenuLateral } from "@/components/layout/menu-lateral";
 
 export const metadata: Metadata = {
@@ -15,12 +19,12 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="app-shell bg-stone-100 text-stone-900">
-        <div className="app-frame">
-          <MenuLateral />
-          <main className="app-main">
-            <div className="page-body">{children}</div>
-          </main>
-        </div>
+        <ProveedorAccesoApp>
+          <div className="app-frame">
+            <MenuLateral />
+            <MarcoContenidoApp>{children}</MarcoContenidoApp>
+          </div>
+        </ProveedorAccesoApp>
       </body>
     </html>
   );

@@ -14,6 +14,10 @@ import {
 } from "@/modules/consultas/utils/motor-consultas";
 import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import {
+  listarRepartosRiverocioManuales,
+  type RepartoRiverocioManual,
+} from "@/modules/consultas/utils/reparto-riverocio";
+import {
   consultaStateToQueryString,
   ESTADO_CONSULTA_INICIAL,
   esEstadoConsultaVacio,
@@ -31,7 +35,7 @@ type PantallaConsultasProps = {
 const panel =
   "rounded-[24px] border border-[#d2b7aa] bg-[linear-gradient(180deg,rgba(250,244,241,0.98)_0%,rgba(238,226,221,0.98)_100%)] shadow-[0_16px_28px_rgba(85,52,46,0.08)]";
 const input =
-  "w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1.5 text-center text-xs text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_4px_10px_rgba(85,52,46,0.04)] outline-none placeholder:text-[#a78f88]";
+  "w-full rounded-2xl border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1.5 text-center text-xs text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_4px_10px_rgba(85,52,46,0.04)] outline-none transition duration-150 placeholder:text-[#a78f88] hover:-translate-y-[1px] hover:scale-[1.005] hover:border-[#9f6425] hover:bg-[#ffffff] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_20px_36px_rgba(85,52,46,0.18)] focus:border-[#7f4718] focus:bg-white focus:shadow-[0_0_0_6px_rgba(169,111,47,0.28),0_22px_40px_rgba(85,52,46,0.20)]";
 
 function fmtMoney(value: number) {
   return `${value.toLocaleString("es-ES", {
@@ -99,8 +103,8 @@ function TipoFamiliasBlock({
           onClick={onToggleTipo}
           className={
             tipoActivo
-              ? "flex-1 rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#4a2d28]"
-              : "flex-1 rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458]"
+              ? "flex-1 rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#4a2d28] shadow-[0_14px_24px_rgba(85,52,46,0.14)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#7f4718] hover:shadow-[0_20px_32px_rgba(85,52,46,0.18)]"
+              : "flex-1 rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#8a6458] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_18px_30px_rgba(85,52,46,0.14)]"
           }
         >
           {tipo}
@@ -135,8 +139,8 @@ function TipoFamiliasBlock({
                     !tipoActivo
                       ? "cursor-not-allowed rounded-2xl border border-[#e2d3cd] bg-[rgba(255,250,248,0.48)] px-2 py-1 text-[11px] font-semibold text-[#b39b94]"
                       : active
-                      ? "rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-semibold text-[#4a2d28]"
-                      : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650]"
+                      ? "rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-semibold text-[#4a2d28] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#7f4718]"
+                      : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_14px_24px_rgba(85,52,46,0.12)]"
                   }
                 >
                   {familia}
@@ -147,7 +151,7 @@ function TipoFamiliasBlock({
           <button
             type="button"
             onClick={onSeleccionRapida}
-            className="mt-3 w-full rounded-2xl border border-dashed border-[#d8c0b9] bg-[rgba(255,250,248,0.5)] px-3 py-2 text-center text-[11px] font-semibold text-[#8d6f67]"
+            className="mt-3 w-full rounded-2xl border border-dashed border-[#d8c0b9] bg-[rgba(255,250,248,0.5)] px-3 py-2 text-center text-[11px] font-semibold text-[#8d6f67] transition duration-150 hover:-translate-y-[1px] hover:border-[#9f6425] hover:bg-[rgba(255,249,243,0.92)] hover:text-[#5f3a32] hover:shadow-[0_14px_24px_rgba(85,52,46,0.12)]"
           >
             {todasSeleccionadas ? "Deseleccionar todo" : "Seleccionar todo"}
           </button>
@@ -228,6 +232,7 @@ export function PantallaConsultas({
       : initialState
   );
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
+  const [repartosRiverocio, setRepartosRiverocio] = useState<RepartoRiverocioManual[]>([]);
 
   useEffect(() => {
     guardarConsultaState(state);
@@ -238,9 +243,13 @@ export function PantallaConsultas({
 
     const cargar = async () => {
       try {
-        const data = await cargarOperativaConsultas(clasificacion);
+        const [data, repartos] = await Promise.all([
+          cargarOperativaConsultas(clasificacion),
+          listarRepartosRiverocioManuales(),
+        ]);
         if (!cancelado) {
           setOperativa(data);
+          setRepartosRiverocio(repartos);
         }
       } catch (error) {
         console.error("No se pudo cargar la operativa para consultas", error);
@@ -271,17 +280,22 @@ export function PantallaConsultas({
   const resultado = useMemo(
     () =>
       calcularConsulta({
-        clasificacion,
-        maestros,
-        operativa,
-        state,
-      }),
-    [clasificacion, maestros, operativa, state]
+      clasificacion,
+      maestros,
+      operativa,
+      state,
+      repartosRiverocio,
+    }),
+    [clasificacion, maestros, operativa, repartosRiverocio, state]
   );
 
   const detalleHref = useMemo(() => {
     const query = consultaStateToQueryString(state);
     return query ? `/consultas/detalle?${query}` : "/consultas/detalle";
+  }, [state]);
+  const repartoRiverocioHref = useMemo(() => {
+    const query = consultaStateToQueryString(state);
+    return query ? `/consultas/reparto-riverocio?${query}` : "/consultas/reparto-riverocio";
   }, [state]);
 
   return (
@@ -308,8 +322,8 @@ export function PantallaConsultas({
                       }
                       className={
                         state.localesSeleccionados.includes(local)
-                          ? "rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-3 py-1 text-[11px] font-semibold text-[#4a2d28]"
-                          : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1 text-[11px] font-semibold text-[#765650]"
+                          ? "rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-3 py-1 text-[11px] font-semibold text-[#4a2d28] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#7f4718]"
+                          : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1 text-[11px] font-semibold text-[#765650] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_14px_24px_rgba(85,52,46,0.12)]"
                       }
                     >
                       {local}
@@ -350,8 +364,8 @@ export function PantallaConsultas({
                     onClick={() => setState((prev) => ({ ...prev, modoIva: "con" }))}
                     className={
                       state.modoIva === "con"
-                        ? "rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-bold text-[#4a2d28]"
-                        : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650]"
+                        ? "rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-bold text-[#4a2d28] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#7f4718]"
+                        : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_14px_24px_rgba(85,52,46,0.12)]"
                     }
                   >
                     Con
@@ -361,8 +375,8 @@ export function PantallaConsultas({
                     onClick={() => setState((prev) => ({ ...prev, modoIva: "sin" }))}
                     className={
                       state.modoIva === "sin"
-                        ? "rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-bold text-[#4a2d28]"
-                        : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650]"
+                        ? "rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-2 py-1 text-[11px] font-bold text-[#4a2d28] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#7f4718]"
+                        : "rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-2 py-1 text-[11px] font-semibold text-[#765650] transition duration-150 hover:-translate-y-[1px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_14px_24px_rgba(85,52,46,0.12)]"
                     }
                   >
                     Sin
@@ -477,17 +491,23 @@ export function PantallaConsultas({
               </div>
             </div>
 
-            <div className="grid gap-2 xl:grid-cols-2">
+            <div className="grid gap-2 xl:grid-cols-3">
+              <Link
+                href={repartoRiverocioHref}
+                className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f2d8cf_0%,#e8c0b3_100%)] px-4 py-1.5 text-center text-sm font-black text-[#6b3022] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#8a4b3d] hover:shadow-[0_20px_32px_rgba(85,52,46,0.18)]"
+              >
+                Reparto Riverocio
+              </Link>
               <Link
                 href={detalleHref}
-                className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-1.5 text-center text-sm font-black text-[#5a3025]"
+                className="rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-1.5 text-center text-sm font-black text-[#5a3025] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#7f4718] hover:shadow-[0_20px_32px_rgba(85,52,46,0.18)]"
               >
                 Abrir detalle
               </Link>
               <button
                 type="button"
                 onClick={() => setState(ESTADO_CONSULTA_INICIAL)}
-                className="rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-4 py-1.5 text-sm font-bold text-[#765650]"
+                className="rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-4 py-1.5 text-sm font-bold text-[#765650] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#9f6425] hover:bg-[#fff9f3] hover:text-[#5f3a32] hover:shadow-[0_18px_30px_rgba(85,52,46,0.14)]"
               >
                 Limpiar filtros
               </button>

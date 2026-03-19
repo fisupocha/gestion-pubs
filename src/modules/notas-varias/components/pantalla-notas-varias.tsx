@@ -67,7 +67,10 @@ function crearFormularioInicial(formaPago = "", banco = ""): FormularioFactura {
   };
 }
 
-function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
+function formularioDesdeRegistro(
+  registro: RegistroFactura,
+  valoresFijos?: { formaPago: string; banco: string }
+): FormularioFactura {
   return {
     empresa: registro.empresa,
     cliente: registro.cliente,
@@ -82,8 +85,8 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     base21: registro.base21,
     pagado: true,
     fechaPago: registro.fechaPago,
-    formaPago: "EFECTIVO",
-    banco: registro.banco,
+    formaPago: registro.formaPago || valoresFijos?.formaPago || "",
+    banco: registro.banco || valoresFijos?.banco || "",
     numeroPagare: registro.numeroPagare,
     observaciones: registro.observaciones,
   };
@@ -194,16 +197,19 @@ function Campo({
 }
 
 const inputClassName =
-  "w-full rounded-2xl border border-[#c8bbd3] bg-[linear-gradient(180deg,#fdfefe_0%,#f1edf5_100%)] px-3 py-2 text-center text-sm text-[#2e2434] shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_6px_14px_rgba(70,54,84,0.06)] outline-none transition placeholder:text-[#9d92a7] focus:border-[#8d74a4] focus:bg-white focus:shadow-[0_0_0_3px_rgba(141,116,164,0.16)] 2xl:py-2.5";
+  "w-full rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 text-center text-sm text-[#173138] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)] outline-none transition duration-150 placeholder:text-[#789198] hover:-translate-y-[1px] hover:scale-[1.005] hover:border-[#3d6d77] hover:bg-[#ffffff] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_22px_38px_rgba(45,63,68,0.20)] focus:border-[#244d57] focus:bg-white focus:shadow-[0_0_0_6px_rgba(95,142,152,0.28),0_24px_42px_rgba(45,63,68,0.22)] 2xl:py-2.5";
 
 const accionClassName =
-  "min-w-[54px] rounded-2xl border border-[#c6b8d2] bg-[linear-gradient(180deg,#fcf9fd_0%,#e7dfef_100%)] px-3 py-2 text-center text-sm font-semibold text-[#40304b] shadow-[0_10px_18px_rgba(70,54,84,0.10)] transition hover:border-[#9b86ad] hover:bg-[#f4eff8] 2xl:min-w-[60px] 2xl:py-2.5";
+  "min-w-[54px] rounded-2xl border border-[#c6b8d2] bg-[linear-gradient(180deg,#fcf9fd_0%,#e7dfef_100%)] px-3 py-2 text-center text-sm font-semibold text-[#40304b] shadow-[0_10px_18px_rgba(70,54,84,0.10)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#5d4378] hover:bg-[#fcf8ff] hover:shadow-[0_22px_36px_rgba(70,54,84,0.22)] active:translate-y-0 active:scale-100 2xl:min-w-[60px] 2xl:py-2.5";
 
 const campoDeshabilitadoClassName =
-  "cursor-not-allowed border-[#d7ccdf] bg-[linear-gradient(180deg,#fbf9fd_0%,#eee8f3_100%)] text-[#8c8197] shadow-none opacity-70";
+  "pointer-events-none cursor-not-allowed appearance-none !border-[#ccd6d9] !bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] !text-[#5e747b] !shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] opacity-100 hover:translate-y-0 hover:scale-100 hover:!border-[#ccd6d9] hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] focus:!border-[#ccd6d9] focus:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] focus:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
 
 const tarjetaDeshabilitadaClassName =
-  "rounded-2xl border border-[#d7ccdf] bg-[linear-gradient(180deg,#fbf9fd_0%,#eee8f3_100%)] px-3.5 py-1.5 text-center opacity-70 shadow-none 2xl:px-4 2xl:py-2";
+  "rounded-2xl border border-[#d2dde0] bg-[linear-gradient(180deg,#dde5e7_0%,#c9d3d7_100%)] px-3.5 py-1.5 text-center opacity-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] 2xl:px-4 2xl:py-2";
+
+const campoDependienteDeshabilitadoClassName =
+  "disabled:pointer-events-none disabled:cursor-not-allowed disabled:appearance-none disabled:!border-[#ccd6d9] disabled:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:!text-[#5e747b] disabled:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] disabled:opacity-100 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:!border-[#ccd6d9] disabled:hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
 
 export function PantallaNotasVarias({
   clientes = [],
@@ -222,7 +228,7 @@ export function PantallaNotasVarias({
   const formaPagoFija =
     opcionesFormaPago.find((item) => item.localeCompare("EFECTIVO", "es", { sensitivity: "base" }) === 0) ??
     opcionesFormaPago[0] ??
-    "EFECTIVO";
+    "";
   const bancoPorDefecto = opcionesBanco[0] ?? "";
   type CampoResaltable =
     | "fechaFactura"
@@ -294,12 +300,12 @@ export function PantallaNotasVarias({
         setRegistros(persistidos as RegistroFactura[]);
 
         if (persistidos.length > 0) {
-          const ultimo = persistidos[persistidos.length - 1] as RegistroFactura;
+          const inicial = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
           setIndiceActual(persistidos.length - 1);
-          setModoNuevo(false);
-          setFormulario(formularioDesdeRegistro(ultimo));
-          setArchivoAdjunto(ultimo.adjunto);
-          setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(ultimo), ultimo.adjunto));
+          setModoNuevo(true);
+          setFormulario(inicial);
+          setArchivoAdjunto(null);
+          setSnapshotInicial(crearSnapshot(inicial, null));
         } else {
           const inicial = crearFormularioInicial(formaPagoFija, bancoPorDefecto);
           setIndiceActual(0);
@@ -455,7 +461,10 @@ export function PantallaNotasVarias({
       return;
     }
 
-    const nextFormulario = formularioDesdeRegistro(registro);
+    const nextFormulario = formularioDesdeRegistro(registro, {
+      formaPago: formaPagoFija,
+      banco: bancoPorDefecto,
+    });
     setIndiceActual(indice);
     setModoNuevo(false);
     setFormulario(nextFormulario);
@@ -561,9 +570,13 @@ export function PantallaNotasVarias({
           : siguientes.findIndex((registro) => registro.id === registroGuardado.id)
       );
       setModoNuevo(false);
-      setFormulario(formularioDesdeRegistro(registroGuardado));
+      const formularioGuardado = formularioDesdeRegistro(registroGuardado, {
+        formaPago: formaPagoFija,
+        banco: bancoPorDefecto,
+      });
+      setFormulario(formularioGuardado);
       setArchivoAdjunto(registroGuardado.adjunto);
-      setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(registroGuardado), registroGuardado.adjunto));
+      setSnapshotInicial(crearSnapshot(formularioGuardado, registroGuardado.adjunto));
     } catch {
       window.alert("No se pudo guardar la nota varia en BBDD.");
     }
@@ -989,7 +1002,7 @@ export function PantallaNotasVarias({
                   value={formulario.familia}
                   onChange={(e) => cambiarFamilia(e.target.value)}
                   disabled={!formulario.tipo}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona familia</option>
                   {familiasDisponibles.map((item) => (
@@ -1005,7 +1018,7 @@ export function PantallaNotasVarias({
                   value={formulario.subfamilia}
                   onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
                   disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} disabled:bg-stone-100`}
+                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
                 >
                   <option value="">
                     {!formulario.familia
@@ -1216,7 +1229,7 @@ export function PantallaNotasVarias({
 
               <Campo label="Forma de pago">
                 <select
-                  value="EFECTIVO"
+                  value={formulario.formaPago}
                   disabled
                   aria-disabled="true"
                   className={`${inputClassName} ${campoDeshabilitadoClassName}`}
@@ -1265,12 +1278,12 @@ export function PantallaNotasVarias({
                 />
               </Campo>
 
-              <div className="rounded-2xl border border-[#b8aac9] bg-[linear-gradient(180deg,#f2eef7_0%,#e1d9eb_100%)] px-3 py-2 shadow-[0_10px_18px_rgba(70,54,84,0.10)]">
-                <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#75627f]">
+              <div className="rounded-2xl border border-[#77a1aa] bg-[linear-gradient(180deg,#ffffff_0%,#eef5f6_100%)] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(45,63,68,0.13)]">
+                <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#60767b]">
                   Adjunto
                 </div>
 
-                <div className="mt-1 truncate text-center text-[11px] font-medium text-[#675a72]">
+                <div className="mt-1 truncate text-center text-[11px] font-medium text-[#62757a]">
                   {archivoAdjunto ? archivoAdjunto.file.name : "Sin archivo adjunto"}
                 </div>
 
