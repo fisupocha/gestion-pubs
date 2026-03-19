@@ -1245,7 +1245,7 @@ export function PantallaGastosBancarios({
                   value={formaPagoFija}
                   disabled
                   aria-disabled="true"
-                  className={`${inputClassName} ${campoFijoBloqueadoClassName}`}
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   {opcionesFormaPago.map((item) => (
                     <option key={item} value={item}>
