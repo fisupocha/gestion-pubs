@@ -7,8 +7,8 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   calcularConsulta,
   FAMILIA_CAJA,
-  FAMILIA_FACTURAS_EMITIDAS,
   obtenerFamiliasPorTipoConsulta,
+  obtenerFamiliaIngresosEmitidasVisible,
   obtenerTiposDisponibles,
   OPERATIVA_CONSULTA_VACIA,
   TIPO_INGRESOS,
@@ -29,8 +29,19 @@ type PantallaConsultasDetalleProps = {
 
 type FamiliaDetalle = {
   familia: string;
-  importe: number;
-  porcentaje: number;
+  bruto: number;
+  emitidas: number;
+  neto: number;
+  porcentajeBruto: number;
+  porcentajeEmitidas: number;
+  porcentajeNeto: number;
+  emitidasDetalle: {
+    movimientoId: string;
+    fecha: string;
+    local: string;
+    importe: number;
+    porcentaje: number;
+  }[];
 };
 
 type TipoDetalle = {
@@ -52,6 +63,14 @@ function fmtPercent(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}%`;
+}
+
+function fmtNegativeMoney(value: number) {
+  return `-${fmtMoney(value)}`;
+}
+
+function fmtNegativePercent(value: number) {
+  return `-${fmtPercent(value)}`;
 }
 
 function fmtDate(value: string) {
@@ -135,13 +154,33 @@ export function PantallaConsultasDetalle({
 
   const detalleTipos = useMemo(() => {
     const cajaBase = resultado.datos.cajaUsada;
+    const familiaIngresosEmitidasVisible = obtenerFamiliaIngresosEmitidasVisible(clasificacion);
     const porcentajeSobreCaja = (importe: number) =>
       cajaBase > 0 ? round2((importe / cajaBase) * 100) : 0;
 
-    const familiaMap = new Map<string, number>();
+    const familiaMap = new Map<
+      string,
+      {
+        bruto: number;
+        emitidas: number;
+        neto: number;
+        emitidasDetalle: FamiliaDetalle["emitidasDetalle"];
+      }
+    >();
     resultado.datos.detalleClasificacion.forEach((row) => {
       const key = `${row.tipo}|||${row.familia}`;
-      familiaMap.set(key, round2((familiaMap.get(key) ?? 0) + row.gastoNeto));
+      const actual = familiaMap.get(key) ?? {
+        bruto: 0,
+        emitidas: 0,
+        neto: 0,
+        emitidasDetalle: [],
+      };
+      familiaMap.set(key, {
+        bruto: round2(actual.bruto + row.gastoBruto),
+        emitidas: round2(actual.emitidas + row.emitidas),
+        neto: round2(actual.neto + row.gastoNeto),
+        emitidasDetalle: [...actual.emitidasDetalle, ...row.emitidasDetalle],
+      });
     });
 
     const tiposBase =
@@ -162,33 +201,43 @@ export function PantallaConsultasDetalle({
           : obtenerFamiliasPorTipoConsulta(clasificacion, tipo);
 
       if (tipo === TIPO_INGRESOS) {
-        familiasBase = [
-          ...new Set([...familiasBase, FAMILIA_CAJA, FAMILIA_FACTURAS_EMITIDAS]),
-        ];
+        familiasBase = [...new Set([...familiasBase, FAMILIA_CAJA])];
+        if (familiaIngresosEmitidasVisible) {
+          familiasBase = [...new Set([...familiasBase, familiaIngresosEmitidasVisible])];
+        }
       }
 
       const familias = [...new Set(familiasBase)]
         .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }))
         .map((familia) => {
-          let importe = familiaMap.get(`${tipo}|||${familia}`) ?? 0;
+          const resumen = familiaMap.get(`${tipo}|||${familia}`) ?? {
+            bruto: 0,
+            emitidas: 0,
+            neto: 0,
+            emitidasDetalle: [],
+          };
 
           if (tipo === TIPO_INGRESOS && familia === FAMILIA_CAJA) {
-            importe = resultado.datos.cajaUsada;
-          }
-          if (tipo === TIPO_INGRESOS && familia === FAMILIA_FACTURAS_EMITIDAS) {
-            importe = round2(
-              resultado.datos.emitidasCompensacionTotal + resultado.datos.emitidasCajaIgnoradas
-            );
+            resumen.bruto = resultado.datos.cajaUsada;
+            resumen.neto = resultado.datos.cajaUsada;
           }
 
           return {
             familia,
-            importe,
-            porcentaje: porcentajeSobreCaja(importe),
+            bruto: resumen.bruto,
+            emitidas: resumen.emitidas,
+            neto: resumen.neto,
+            porcentajeBruto: porcentajeSobreCaja(resumen.bruto),
+            porcentajeEmitidas: porcentajeSobreCaja(resumen.emitidas),
+            porcentajeNeto: porcentajeSobreCaja(resumen.neto),
+            emitidasDetalle: [...resumen.emitidasDetalle].sort((a, b) => {
+              if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+              return b.movimientoId.localeCompare(a.movimientoId);
+            }),
           };
         });
 
-      const total = round2(familias.reduce((acc, item) => acc + item.importe, 0));
+      const total = round2(familias.reduce((acc, item) => acc + item.neto, 0));
 
       return {
         tipo,
@@ -212,13 +261,24 @@ export function PantallaConsultasDetalle({
       ["Hasta", fmtDate(initialState.hasta)],
       ["Caja", resultado.datos.cajaUsada],
       [""],
-      ["Tipo/Familia", "Importe", "%"],
+      ["Tipo/Familia", "Bruto", "Emitidas", "Neto", "% Neto"],
       ...detalleTipos.flatMap((bloque) => [
-        [bloque.tipo, bloque.total, bloque.porcentaje],
-        ...bloque.familias.map((familia) => [
-          `    ${familia.familia}`,
-          familia.importe,
-          familia.porcentaje,
+        [bloque.tipo, "", "", bloque.total, bloque.porcentaje],
+        ...bloque.familias.flatMap((familia) => [
+          [
+            `    ${familia.familia}`,
+            familia.bruto,
+            -familia.emitidas,
+            familia.neto,
+            familia.porcentajeNeto,
+          ],
+          ...familia.emitidasDetalle.map((emitida) => [
+            `      Emitida ${fmtDate(emitida.fecha)} ${emitida.local}`,
+            "",
+            -emitida.importe,
+            "",
+            -emitida.porcentaje,
+          ]),
         ]),
       ]),
       [""],
@@ -428,15 +488,63 @@ export function PantallaConsultasDetalle({
 
                   <div className="divide-y divide-[#f0e3de]">
                     {bloque.familias.map((familia) => (
-                      <div
-                        key={`${bloque.tipo}-${familia.familia}`}
-                        className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-center gap-3 px-5 py-3 text-sm text-[#4b332d]"
-                      >
-                        <div className="pl-6 font-medium text-[#60453d]">{familia.familia}</div>
-                        <div className="text-right font-semibold">{fmtMoney(familia.importe)}</div>
-                        <div className="text-right font-semibold text-[#8a6458]">
-                          {fmtPercent(familia.porcentaje)}
+                      <div key={`${bloque.tipo}-${familia.familia}`} className="px-5 py-4 text-sm text-[#4b332d]">
+                        <div className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-center gap-3">
+                          <div className="pl-6 font-medium text-[#60453d]">{familia.familia}</div>
+                          <div className="text-right font-black text-[#432c26]">
+                            {fmtMoney(familia.neto)}
+                          </div>
+                          <div className="text-right font-black text-[#8a6458]">
+                            {fmtPercent(familia.porcentajeNeto)}
+                          </div>
                         </div>
+
+                        {familia.emitidasDetalle.length > 0 ? (
+                          <div className="mt-2 space-y-1 pl-10">
+                            <div className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[10px]">
+                              <div className="font-semibold text-[#8a7067]">
+                                Total fras
+                              </div>
+                              <div className="text-right font-semibold text-[#6b544d]">
+                                {fmtMoney(familia.bruto)}
+                              </div>
+                              <div className="text-right font-semibold text-[#8a7067]">
+                                {fmtPercent(familia.porcentajeBruto)}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[10px]">
+                              <div className="font-semibold text-[#9b6d60]">
+                                Total abonos
+                              </div>
+                              <div className="text-right font-semibold text-[#8b4334]">
+                                {fmtNegativeMoney(familia.emitidas)}
+                              </div>
+                              <div className="text-right font-semibold text-[#9b6d60]">
+                                {fmtNegativePercent(familia.porcentajeEmitidas)}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1 pl-6">
+                              {familia.emitidasDetalle.map((emitida) => (
+                                <div
+                                  key={emitida.movimientoId}
+                                  className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[9px]"
+                                >
+                                  <div className="font-medium text-[#7d645c]">
+                                    {fmtDate(emitida.fecha)} - {emitida.local}
+                                  </div>
+                                  <div className="text-right font-semibold text-[#8b4334]">
+                                    {fmtNegativeMoney(emitida.importe)}
+                                  </div>
+                                  <div className="text-right font-semibold text-[#9b6d60]">
+                                    {fmtNegativePercent(emitida.porcentaje)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

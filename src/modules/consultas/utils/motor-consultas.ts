@@ -77,6 +77,13 @@ export type ResumenClasificacion = {
   emitidas: number;
   gastoNeto: number;
   iva: number;
+  emitidasDetalle: {
+    movimientoId: string;
+    fecha: string;
+    local: string;
+    importe: number;
+    porcentaje: number;
+  }[];
 };
 
 export const TIPO_INGRESOS = "Ingresos";
@@ -101,6 +108,28 @@ function norm(value?: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function construirClaveCoincidencia(item: Pick<Movimiento, "local" | "tipoLabel" | "familiaLabel" | "subfamilia">) {
+  return [
+    norm(item.local),
+    norm(item.tipoLabel),
+    norm(item.familiaLabel),
+    norm(item.subfamilia),
+  ].join("|||");
+}
+
+export function obtenerFamiliaIngresosEmitidasVisible(clasificacion: ClasificacionMapa) {
+  const tipoIngresos = Object.values(clasificacion).find((item) => item.label === TIPO_INGRESOS);
+  if (!tipoIngresos) {
+    return null;
+  }
+
+  return (
+    Object.values(tipoIngresos.familias)
+      .map((familia) => familia.label)
+      .find((familia) => norm(familia).includes("emitid")) ?? null
+  );
 }
 
 function esLocalEmpresa(value?: string) {
@@ -269,7 +298,7 @@ export function obtenerFamiliasPorTipoConsulta(clasificacion: ClasificacionMapa,
       : [];
 
   if (tipo === TIPO_INGRESOS) {
-    base.push(FAMILIA_CAJA, FAMILIA_FACTURAS_EMITIDAS);
+    base.push(FAMILIA_CAJA);
   }
 
   return ordenarAlfabetico([...new Set(base)]);
@@ -326,6 +355,8 @@ export function calcularConsulta({
     clasificacion,
     state.familiasSeleccionadas
   );
+  const familiaIngresosEmitidasVisible = obtenerFamiliaIngresosEmitidasVisible(clasificacion);
+  const familiasIngreso = new Set(obtenerFamiliasPorTipoConsulta(clasificacion, TIPO_INGRESOS));
 
   const localesSeleccionadosOperativos = state.localesSeleccionados.filter(
     (item) => !esLocalEmpresa(item)
@@ -343,13 +374,14 @@ export function calcularConsulta({
     ingresosActivo &&
     (state.familiasSeleccionadas.length === 0 ||
       state.familiasSeleccionadas.includes(FAMILIA_CAJA));
-  const incluyeEmitidas =
+  const incluyeEmitidasSinCoincidencia =
     ingresosActivo &&
     (state.familiasSeleccionadas.length === 0 ||
-      state.familiasSeleccionadas.includes(FAMILIA_FACTURAS_EMITIDAS));
+      (familiaIngresosEmitidasVisible !== null &&
+        state.familiasSeleccionadas.includes(familiaIngresosEmitidasVisible)));
   const tiposGasto = state.tiposSeleccionados.filter((item) => item !== TIPO_INGRESOS);
   const familiasGasto = state.familiasSeleccionadas.filter(
-    (item) => item !== FAMILIA_CAJA && item !== FAMILIA_FACTURAS_EMITIDAS
+    (item) => !familiasIngreso.has(item)
   );
   const hayFiltroGasto =
     tiposGasto.length > 0 ||
@@ -391,15 +423,26 @@ export function calcularConsulta({
   const ivaCaja = round2(cajas.reduce((acc, item) => acc + item.iva, 0));
   const emitidasCaja = emitidas.filter((item) => item.esEmitidaCaja);
   const emitidasNoCaja = emitidas.filter((item) => !item.esEmitidaCaja);
+  const clavesGasto = new Set(gastos.map((item) => construirClaveCoincidencia(item)));
+  const emitidasNoCajaCompensadas = emitidasNoCaja.filter((item) =>
+    clavesGasto.has(construirClaveCoincidencia(item))
+  );
+  const emitidasNoCajaSinCoincidencia = emitidasNoCaja.filter(
+    (item) => !clavesGasto.has(construirClaveCoincidencia(item))
+  );
   const emitidasCajaIgnoradas = round2(
     emitidasCaja.reduce((acc, item) => acc + importe(item), 0)
   );
   const emitidasCompensacionTotal = round2(
-    emitidasNoCaja.reduce((acc, item) => acc + importe(item), 0)
+    emitidasNoCajaCompensadas.reduce((acc, item) => acc + importe(item), 0)
+  );
+  const emitidasSinCoincidenciaTotal = round2(
+    emitidasNoCajaSinCoincidencia.reduce((acc, item) => acc + importe(item), 0)
   );
 
   const gastosSel = gastos.filter(matchGasto);
-  const emitidasSel = emitidasNoCaja.filter(matchGasto);
+  const emitidasSel = emitidasNoCajaCompensadas.filter(matchGasto);
+  const emitidasSinCoincidenciaSel = emitidasNoCajaSinCoincidencia;
   const gastosEmpresa = gastosSel.filter((item) => item.esEmpresa);
   const gastosLocales = gastosSel.filter((item) => !item.esEmpresa);
   const emitidasEmpresa = emitidasSel.filter((item) => item.esEmpresa);
@@ -516,9 +559,7 @@ export function calcularConsulta({
   const gastoNeto = round2([...porLocal.values()].reduce((acc, item) => acc + item.neto, 0));
   const ingresoSeleccionado = round2(
     (incluyeCaja ? cajaUsada : 0) +
-      (incluyeEmitidas
-        ? emitidasCompensacionTotal + (incluyeCaja ? 0 : emitidasCajaIgnoradas)
-        : 0)
+      (incluyeEmitidasSinCoincidencia ? emitidasSinCoincidenciaTotal : 0)
   );
   const gastoSeleccionado =
     hayFiltroGasto ||
@@ -529,7 +570,7 @@ export function calcularConsulta({
       : 0;
   const importeSeleccion = round2(ingresoSeleccionado + gastoSeleccionado);
   const porcentaje = cajaUsada > 0 ? round2((gastoNeto / cajaUsada) * 100) : 0;
-  const beneficio = round2(cajaUsada - gastoNeto);
+  const beneficio = round2(cajaUsada + emitidasSinCoincidenciaTotal - gastoNeto);
 
   const detalleMap = new Map<string, ResumenClasificacion>();
   gastosSel.forEach((item) => {
@@ -543,6 +584,7 @@ export function calcularConsulta({
       emitidas: 0,
       gastoNeto: 0,
       iva: 0,
+      emitidasDetalle: [],
     };
     const importeVisible = item.esEmpresa && aplicarReparto
       ? round2(
@@ -575,6 +617,7 @@ export function calcularConsulta({
       emitidas: 0,
       gastoNeto: 0,
       iva: 0,
+      emitidasDetalle: [],
     };
     const emitidasVisibles = item.esEmpresa && aplicarReparto
       ? round2(
@@ -585,8 +628,57 @@ export function calcularConsulta({
         )
       : importe(item);
     row.emitidas = round2(row.emitidas + emitidasVisibles);
+    row.emitidasDetalle = [
+      ...row.emitidasDetalle,
+      {
+        movimientoId: item.id,
+        fecha: item.fecha,
+        local: item.local,
+        importe: emitidasVisibles,
+        porcentaje: cajaUsada > 0 ? round2((emitidasVisibles / cajaUsada) * 100) : 0,
+      },
+    ];
     detalleMap.set(key, row);
   });
+
+  if (familiaIngresosEmitidasVisible) {
+    emitidasSinCoincidenciaSel.forEach((item) => {
+      const key = `${TIPO_INGRESOS}|||${familiaIngresosEmitidasVisible}|||`;
+      const row = detalleMap.get(key) ?? {
+        key,
+        tipo: TIPO_INGRESOS,
+        familia: familiaIngresosEmitidasVisible,
+        subfamilia: "",
+        gastoBruto: 0,
+        emitidas: 0,
+        gastoNeto: 0,
+        iva: 0,
+        emitidasDetalle: [],
+      };
+      const importeVisible =
+        item.esEmpresa && aplicarReparto
+          ? round2(
+              [...setLocalesSeleccionadosOperativos].reduce(
+                (acc, local) =>
+                  acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
+                0
+              )
+            )
+          : importe(item);
+      const ivaVisible =
+        item.esEmpresa && aplicarReparto
+          ? round2(
+              [...setLocalesSeleccionadosOperativos].reduce(
+                (acc, local) => acc + (construirRepartoEmpresa(item, item.iva).get(local) ?? 0),
+                0
+              )
+            )
+          : item.iva;
+      row.gastoBruto = round2(row.gastoBruto + importeVisible);
+      row.iva = round2(row.iva + ivaVisible);
+      detalleMap.set(key, row);
+    });
+  }
 
   const detalleClasificacion = [...detalleMap.values()]
     .map((row) => ({
@@ -611,6 +703,7 @@ export function calcularConsulta({
       ivaCaja,
       emitidasCajaIgnoradas,
       emitidasCompensacionTotal,
+      emitidasSinCoincidenciaTotal,
       ingresoSeleccionado,
       bruto,
       gastoNeto,

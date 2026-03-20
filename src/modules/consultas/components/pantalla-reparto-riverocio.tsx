@@ -71,6 +71,22 @@ function crearPorcentajesIniciales(locales: string[], reparto?: RepartoRiverocio
   );
 }
 
+function esMovimientoRepartible(item: Movimiento) {
+  if (!item.esEmpresa) {
+    return false;
+  }
+
+  if (item.clase === "gasto") {
+    return true;
+  }
+
+  return item.clase === "emitida" && !item.esEmitidaCaja;
+}
+
+function esEmitidaRiverocio(item: Movimiento) {
+  return item.clase === "emitida" && !item.esEmitidaCaja;
+}
+
 const panelPrincipalClassName =
   "rounded-[30px] border border-[#d9c0b4] bg-[linear-gradient(180deg,rgba(255,251,248,0.98)_0%,rgba(244,233,227,0.98)_100%)] shadow-[0_22px_40px_rgba(85,52,46,0.10)]";
 const chipRepartoClassName =
@@ -139,7 +155,7 @@ export function PantallaRepartoRiverocio({
 
   const registrosRiverocio = useMemo(() => {
     return obtenerMovimientosConsulta(clasificacion, operativa)
-      .filter((item) => item.clase === "gasto" && item.esEmpresa)
+      .filter(esMovimientoRepartible)
       .sort((a, b) => {
         if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
         return b.id.localeCompare(a.id);
@@ -254,26 +270,49 @@ export function PantallaRepartoRiverocio({
               const reparto = repartosMap.get(item.id);
               const editando = edicion?.movimientoId === item.id;
               const totalFactura = item.conIva;
+              const esEmitida = esEmitidaRiverocio(item);
+              const claseMovimientoLabel = esEmitida ? "Emitida" : "Gasto";
+              const chipClaseClassName = esEmitida
+                ? "inline-flex items-center rounded-full border border-[#7eb5c7] bg-[linear-gradient(180deg,#e6f7fb_0%,#cfeef6_100%)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#235a69]"
+                : "inline-flex items-center rounded-full border border-[#d8b2a7] bg-[linear-gradient(180deg,#fff4ef_0%,#f4ddd4_100%)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5144]";
+              const tarjetaFilaClassName = reparto
+                ? esEmitida
+                  ? `${columnasTablaClassName} items-center rounded-[26px] border border-[#7ab4c6] bg-[linear-gradient(180deg,#f3fbfd_0%,#dff1f7_100%)] px-5 py-4 shadow-[0_18px_34px_rgba(41,96,116,0.12)]`
+                  : `${columnasTablaClassName} items-center rounded-[26px] border border-[#cd8f82] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e2db_100%)] px-5 py-4 shadow-[0_18px_34px_rgba(85,52,46,0.12)]`
+                : esEmitida
+                  ? `${columnasTablaClassName} items-center rounded-[26px] border border-[#c3dde6] bg-[linear-gradient(180deg,#fbfeff_0%,#edf7fa_100%)] px-5 py-4 shadow-[0_14px_24px_rgba(41,96,116,0.08)]`
+                  : `${columnasTablaClassName} items-center rounded-[26px] border border-[#dcc7be] bg-[linear-gradient(180deg,#fffdfa_0%,#f7efea_100%)] px-5 py-4 shadow-[0_14px_24px_rgba(85,52,46,0.07)]`;
+              const tarjetaTotalClassName = esEmitida
+                ? "rounded-[20px] border border-[#a7cfdb] bg-[linear-gradient(180deg,#f6fdff_0%,#e1f4fa_100%)] px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]"
+                : "rounded-[20px] border border-[#d8b4aa] bg-[linear-gradient(180deg,#fffaf7_0%,#f5e7e1_100%)] px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]";
+              const totalLabelClassName = esEmitida
+                ? "text-[10px] font-black uppercase tracking-[0.16em] text-[#5d8d9b]"
+                : "text-[10px] font-black uppercase tracking-[0.16em] text-[#9b756a]";
+              const totalValueClassName = esEmitida
+                ? "mt-0.5 text-base font-black text-[#255463]"
+                : "mt-0.5 text-base font-black text-[#4a2d28]";
+              const editadoClassName = esEmitida
+                ? "rounded-full border border-[#5f9cb0] bg-[linear-gradient(180deg,#d8eff6_0%,#bae0ec_100%)] px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#225766] shadow-[0_8px_14px_rgba(41,96,116,0.10)]"
+                : "rounded-full border border-[#b4695c] bg-[linear-gradient(180deg,#f2d8cf_0%,#e8c0b3_100%)] px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#7f392b] shadow-[0_8px_14px_rgba(85,52,46,0.10)]";
 
               return (
                 <article
                   key={item.id}
-                  className={
-                    reparto
-                      ? `${columnasTablaClassName} items-center rounded-[26px] border border-[#cd8f82] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e2db_100%)] px-5 py-4 shadow-[0_18px_34px_rgba(85,52,46,0.12)]`
-                      : `${columnasTablaClassName} items-center rounded-[26px] border border-[#dcc7be] bg-[linear-gradient(180deg,#fffdfa_0%,#f7efea_100%)] px-5 py-4 shadow-[0_14px_24px_rgba(85,52,46,0.07)]`
-                  }
+                  className={tarjetaFilaClassName}
                 >
                   <div className="rounded-2xl border border-[#e0cec7] bg-white/68 px-3 py-2 text-center text-sm font-black text-[#402a24] shadow-[inset_0_1px_0_rgba(255,255,255,0.84)]">
                     {fmtDate(item.fecha)}
                   </div>
-                  <div className="truncate text-sm font-semibold text-[#5f453f]">{item.tipoLabel}</div>
+                  <div className="min-w-0">
+                    <div className={chipClaseClassName}>{claseMovimientoLabel}</div>
+                    <div className="mt-2 truncate text-sm font-semibold text-[#5f453f]">{item.tipoLabel}</div>
+                  </div>
                   <div className="truncate text-sm font-semibold text-[#5f453f]">{item.familiaLabel}</div>
-                  <div className="rounded-[20px] border border-[#d8b4aa] bg-[linear-gradient(180deg,#fffaf7_0%,#f5e7e1_100%)] px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]">
-                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9b756a]">
+                  <div className={tarjetaTotalClassName}>
+                    <div className={totalLabelClassName}>
                       Total
                     </div>
-                    <div className="mt-0.5 text-base font-black text-[#4a2d28]">{fmtMoney(totalFactura)}</div>
+                    <div className={totalValueClassName}>{fmtMoney(totalFactura)}</div>
                   </div>
 
                   <div className="min-w-0">
@@ -343,7 +382,7 @@ export function PantallaRepartoRiverocio({
 
                   <div className="min-w-0 flex flex-col items-center justify-center gap-2">
                     {reparto ? (
-                      <span className="rounded-full border border-[#b4695c] bg-[linear-gradient(180deg,#f2d8cf_0%,#e8c0b3_100%)] px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#7f392b] shadow-[0_8px_14px_rgba(85,52,46,0.10)]">
+                      <span className={editadoClassName}>
                         Editado
                       </span>
                     ) : null}
