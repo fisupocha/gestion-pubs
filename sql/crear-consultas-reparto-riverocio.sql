@@ -52,4 +52,18 @@ begin
       using (true)
       with check (true);
   end if;
+
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'consultas_reparto_riverocio'
+      and policyname = 'consultas_reparto_riverocio_delete'
+  ) then
+    create policy consultas_reparto_riverocio_delete
+      on public.consultas_reparto_riverocio
+      for delete
+      to anon, authenticated
+      using (true);
+  end if;
 end $$;

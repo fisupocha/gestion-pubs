@@ -127,12 +127,8 @@ export async function listarRepartosRiverocioManuales() {
       .map((row) => desdeFila(row as unknown as Record<string, unknown>))
       .filter(Boolean) as RepartoRiverocioManual[];
 
-    if (repartos.length > 0) {
-      guardarLocal(repartos);
-      return repartos;
-    }
-
-    return respaldoLocal;
+    guardarLocal(repartos);
+    return repartos;
   } catch {
     return respaldoLocal;
   }
