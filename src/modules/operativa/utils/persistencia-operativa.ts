@@ -648,13 +648,13 @@ export async function guardarAlquilerPersistido(
   const { tipoId, familiaId, subfamiliaId } = resolverClasificacionIds(actual, clasificacion, maestros);
   const formaPagoId = actual.formaPago ? resolverId(maestros.formasPago, actual.formaPago) : null;
   const bancoId = actual.banco ? resolverId(maestros.bancos, actual.banco) : null;
-  const retencion = round2(parseDecimal(actual.retencion));
   const base0 = round2(parseDecimal(actual.base0));
   const base4 = round2(parseDecimal(actual.base4));
   const base10 = round2(parseDecimal(actual.base10));
   const base21 = round2(parseDecimal(actual.base21));
-  const totalBase = round2(base4 + base10 + base21);
-  const totalIva = round2(base4 * 0.04 + base10 * 0.1 + base21 * 0.21);
+  const retencion = round2(base21 * 0.19);
+  const totalBase = round2(base0 + base21);
+  const totalIva = round2(base21 * 0.21);
   const totalFactura = round2(totalBase + totalIva);
 
   if (!empresaId || !proveedorId) {

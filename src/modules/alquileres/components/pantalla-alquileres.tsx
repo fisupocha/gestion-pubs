@@ -229,7 +229,7 @@ export function PantallaAlquileres({
     | "fechaFactura"
     | "numeroFactura"
     | "retencion"
-    | "base4"
+    | "base0"
     | "base10"
     | "base21"
     | "fechaPago"
@@ -270,7 +270,7 @@ export function PantallaAlquileres({
   const fechaFacturaRef = useRef<HTMLInputElement | null>(null);
   const numeroFacturaRef = useRef<HTMLInputElement | null>(null);
   const retencionRef = useRef<HTMLInputElement | null>(null);
-  const base4Ref = useRef<HTMLInputElement | null>(null);
+  const base0Ref = useRef<HTMLInputElement | null>(null);
   const base10Ref = useRef<HTMLInputElement | null>(null);
   const base21Ref = useRef<HTMLInputElement | null>(null);
   const fechaPagoRef = useRef<HTMLInputElement | null>(null);
@@ -351,14 +351,12 @@ export function PantallaAlquileres({
     return [...(familias[formulario.familia]?.subfamilias ?? [])];
   }, [clasificacionActiva, formulario.familia, formulario.tipo]);
 
-  const base4 = parseDecimal(formulario.base4);
-  const base10 = parseDecimal(formulario.base10);
+  const base0 = parseDecimal(formulario.base0);
   const base21 = parseDecimal(formulario.base21);
-  const iva4 = round2((base4 * 4) / 100);
-  const iva10 = round2((base10 * 10) / 100);
+  const retencionCalculada = round2((base21 * 19) / 100);
   const iva21 = round2((base21 * 21) / 100);
-  const totalBase = round2(base4 + base10 + base21);
-  const totalIva = round2(iva4 + iva10 + iva21);
+  const totalBase = round2(base0 + base21);
+  const totalIva = round2(iva21);
   const totalFactura = round2(totalBase + totalIva);
   const idVisible = modoNuevo ? obtenerSiguienteId(registros) : (registros[indiceActual]?.id ?? 1);
   const snapshotActual = useMemo(
@@ -388,7 +386,7 @@ export function PantallaAlquileres({
       fechaFactura: fechaFacturaRef,
       numeroFactura: numeroFacturaRef,
       retencion: retencionRef,
-      base4: base4Ref,
+      base0: base0Ref,
       base10: base10Ref,
       base21: base21Ref,
       fechaPago: fechaPagoRef,
@@ -443,7 +441,7 @@ export function PantallaAlquileres({
   }
 
   function cambiarImporte(
-    campo: "retencion" | "base4" | "base10" | "base21",
+    campo: "retencion" | "base0" | "base10" | "base21",
     value: string
   ) {
     setFormulario((prev) => ({
@@ -740,15 +738,9 @@ export function PantallaAlquileres({
     >;
     const familiaLabel =
       familias[registro.familia]?.label ?? registro.familia;
-    const totalBaseRegistro = round2(
-      parseDecimal(registro.base4) +
-        parseDecimal(registro.base10) +
-        parseDecimal(registro.base21)
-    );
+    const totalBaseRegistro = round2(parseDecimal(registro.base0) + parseDecimal(registro.base21));
     const totalIvaRegistro = round2(
-      (parseDecimal(registro.base4) * 4) / 100 +
-        (parseDecimal(registro.base10) * 10) / 100 +
-        (parseDecimal(registro.base21) * 21) / 100
+      (parseDecimal(registro.base21) * 21) / 100
     );
     const totalFacturaRegistro = round2(totalBaseRegistro + totalIvaRegistro);
 
@@ -760,8 +752,8 @@ export function PantallaAlquileres({
       tipoLabel,
       familiaLabel,
       registro.subfamilia,
-      registro.retencion,
-      registro.base4,
+      fmtMoney(round2((parseDecimal(registro.base21) * 19) / 100)),
+      registro.base0,
       registro.base10,
       registro.base21,
       fmtMoney(totalBaseRegistro),
@@ -784,7 +776,7 @@ export function PantallaAlquileres({
       ["numeroFactura", registro.numeroFactura],
       ["fechaFactura", registro.fechaFactura],
       ["retencion", registro.retencion],
-      ["base4", registro.base4],
+      ["base0", registro.base0],
       ["base10", registro.base10],
       ["base21", registro.base21],
       ["fechaPago", registro.fechaPago],
@@ -1048,8 +1040,8 @@ export function PantallaAlquileres({
               <Campo label="Retencion">
                 <input
                   ref={retencionRef}
-                  value={formulario.retencion}
-                  onChange={(e) => cambiarImporte("retencion", e.target.value)}
+                  value={formulario.base21 ? fmtMoney(retencionCalculada) : ""}
+                  readOnly
                   type="text"
                   inputMode="decimal"
                   placeholder="0,00"
@@ -1057,11 +1049,11 @@ export function PantallaAlquileres({
                 />
               </Campo>
 
-              <Campo label="Base IVA 4%">
+              <Campo label="Basura">
                 <input
-                  ref={base4Ref}
-                  value={formulario.base4}
-                  onChange={(e) => cambiarImporte("base4", e.target.value)}
+                  ref={base0Ref}
+                  value={formulario.base0}
+                  onChange={(e) => cambiarImporte("base0", e.target.value)}
                   type="text"
                   inputMode="decimal"
                   placeholder="0,00"
