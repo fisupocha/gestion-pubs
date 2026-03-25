@@ -8,6 +8,7 @@ import {
 } from "@/components/acceso/control-acceso-app";
 import {
   itemConsultas,
+  itemsGestionDiaria,
   itemsMaestros,
   itemsOperativa,
 } from "@/config/menu/items-menu";
@@ -109,7 +110,12 @@ export function MenuLateral() {
   const pathname = usePathname();
   const acceso = useAccesoApp();
 
-  if (pathname === "/consultas/reparto-riverocio") {
+  if (
+    pathname === "/consultas/reparto-riverocio" ||
+    pathname.startsWith("/maestros/empleados/cuadrante-demo") ||
+    pathname.startsWith("/gestion-diaria/empleados/cuadrante-demo") ||
+    pathname.startsWith("/gestion-diaria/caja-diaria")
+  ) {
     return null;
   }
 
@@ -144,6 +150,14 @@ export function MenuLateral() {
             <MenuBox
               titulo="Maestros"
               items={itemsMaestros}
+              pathname={pathname}
+              itemsClassName="grid gap-1.5"
+              itemClassName="min-h-[40px]"
+            />
+
+            <MenuBox
+              titulo="Gestión diaria"
+              items={itemsGestionDiaria}
               pathname={pathname}
               itemsClassName="grid gap-1.5"
               itemClassName="min-h-[40px]"

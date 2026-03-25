@@ -8,6 +8,7 @@ export const itemsOperativa = [
   { href: "/creditos", label: "Créditos" },
   { href: "/impuestos", label: "Impuestos" },
   { href: "/personal", label: "Personal" },
+  { href: "/horas", label: "Horas" },
   { href: "/facturas-emitidas", label: "Facturas emitidas" },
   { href: "/caja", label: "Caja" },
 ];
@@ -17,6 +18,11 @@ export const itemsMaestros = [
   { href: "/maestros/proveedores", label: "Proveedores" },
   { href: "/maestros/clientes", label: "Clientes" },
   { href: "/maestros/varios", label: "Maestros varios" },
+];
+
+export const itemsGestionDiaria = [
+  { href: "/gestion-diaria/empleados", label: "Empleados" },
+  { href: "/gestion-diaria/caja-diaria", label: "Caja diaria" },
 ];
 
 export const itemConsultas = { href: "/consultas", label: "Consultas" };
