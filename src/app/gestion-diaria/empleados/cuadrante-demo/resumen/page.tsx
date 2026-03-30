@@ -5,7 +5,7 @@ import { listarEmpresas } from "@/modules/maestros/empresas/data/listar-empresas
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
-export default async function CuadranteDemoPage() {
+export default async function CuadranteResumenPage() {
   let empleadosBase: Array<{ id: number; nombre: string; familia: string }> = [];
   let localesBbdd: Array<{ id: number; nombre: string }> = [];
 
@@ -29,7 +29,7 @@ export default async function CuadranteDemoPage() {
     <PantallaCuadranteDemo
       empleadosBase={empleadosBase}
       localesBbdd={localesBbdd}
-      modoPantalla="cuadrante"
+      modoPantalla="resumen"
     />
   );
 }

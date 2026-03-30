@@ -899,6 +899,163 @@ export async function guardarCajaPersistida(
   );
 }
 
+export async function guardarCajaMensualDesdeGestionDiaria(
+  fecha: string,
+  totales: Array<{ local: string; totalCaja: number }>
+) {
+  const maestros = await cargarMaestrosPersistencia();
+  const tipoId = resolverId(maestros.tipos, "Ingresos");
+  const familiaId = resolverFamiliaId(maestros.familias, "Caja", tipoId);
+
+  if (!tipoId || !familiaId) {
+    throw new Error("No se pudo resolver la clasificacion Ingresos > Caja en BBDD");
+  }
+
+  const filas = totales.map((item) => {
+    const empresaId = resolverId(maestros.empresas, item.local);
+
+    if (!empresaId) {
+      throw new Error(`No se pudo resolver el local ${item.local} en BBDD`);
+    }
+
+    const totalCaja = round2(item.totalCaja);
+    const totalBase = round2(totalCaja / 1.1);
+    const totalIva = round2(totalCaja - totalBase);
+
+    return {
+      empresa_id: empresaId,
+      fecha_caja: fecha,
+      tipo_id: tipoId,
+      familia_id: familiaId,
+      subfamilia_id: null,
+      total_base: totalBase,
+      total_iva: totalIva,
+      total_caja: totalCaja,
+      cobrado: true,
+      fecha_cobro: null,
+      forma_cobro_id: null,
+      banco_id: null,
+      observaciones: "",
+      adjunto_nombre: null,
+      adjunto_url: null,
+    };
+  });
+
+  const empresaIds = filas.map((item) => item.empresa_id);
+  const { data: existentes, error: errorExistentes } = await supabase
+    .from("operativa_caja")
+    .select("id")
+    .eq("fecha_caja", fecha)
+    .eq("tipo_id", tipoId)
+    .eq("familia_id", familiaId)
+    .in("empresa_id", empresaIds);
+
+  if (errorExistentes) {
+    throw new Error("No se pudo preparar la actualizacion de Operativa Caja");
+  }
+
+  const idsExistentes = (existentes ?? []).map((item) => Number(item.id)).filter(Number.isFinite);
+
+  if (idsExistentes.length > 0) {
+    const { error: errorDelete } = await supabase
+      .from("operativa_caja")
+      .delete()
+      .in("id", idsExistentes);
+
+    if (errorDelete) {
+      throw new Error("No se pudo limpiar la Caja anterior del mes");
+    }
+  }
+
+  const { error: errorInsert } = await supabase.from("operativa_caja").insert(filas);
+
+  if (errorInsert) {
+    throw new Error("No se pudo guardar la Caja mensual en Operativa");
+  }
+}
+
+export async function guardarPersonalMensualDesdeCuadrante(
+  fecha: string,
+  totales: Array<{ local: string; familia: string; importe: number }>
+) {
+  const maestros = await cargarMaestrosPersistencia();
+  const tipoId = resolverId(maestros.tipos, "Personal");
+
+  if (!tipoId) {
+    throw new Error("No se pudo resolver el tipo Personal en BBDD");
+  }
+
+  const filas = totales.map((item) => {
+    const empresaId = resolverId(maestros.empresas, item.local);
+    const familiaId = resolverFamiliaId(maestros.familias, item.familia, tipoId);
+
+    if (!empresaId) {
+      throw new Error(`No se pudo resolver el local ${item.local} en BBDD`);
+    }
+
+    if (!familiaId) {
+      throw new Error(`No se pudo resolver la familia ${item.familia} en BBDD`);
+    }
+
+    const importe = round2(item.importe);
+
+    return {
+      empresa_id: empresaId,
+      fecha_personal: fecha,
+      tipo_id: tipoId,
+      familia_id: familiaId,
+      subfamilia_id: null,
+      base_0: importe,
+      base_21: 0,
+      total_base: importe,
+      total_iva: 0,
+      total_personal: importe,
+      observaciones: "",
+      adjunto_nombre: null,
+      adjunto_url: null,
+    };
+  });
+
+  const empresaIds = [...new Set(filas.map((item) => item.empresa_id))];
+  const familiaIds = [...new Set(filas.map((item) => item.familia_id))];
+  const { data: existentes, error: errorExistentes } = await supabase
+    .from("operativa_personal")
+    .select("id, empresa_id, familia_id")
+    .eq("fecha_personal", fecha)
+    .eq("tipo_id", tipoId)
+    .in("empresa_id", empresaIds)
+    .in("familia_id", familiaIds);
+
+  if (errorExistentes) {
+    throw new Error("No se pudo preparar la actualizacion de Operativa Personal");
+  }
+
+  const combinacionesActuales = new Set(
+    filas.map((item) => `${item.empresa_id}__${item.familia_id}`)
+  );
+  const idsExistentes = (existentes ?? [])
+    .filter((item) => combinacionesActuales.has(`${item.empresa_id}__${item.familia_id}`))
+    .map((item) => Number(item.id))
+    .filter(Number.isFinite);
+
+  if (idsExistentes.length > 0) {
+    const { error: errorDelete } = await supabase
+      .from("operativa_personal")
+      .delete()
+      .in("id", idsExistentes);
+
+    if (errorDelete) {
+      throw new Error("No se pudo limpiar el Personal anterior del mes");
+    }
+  }
+
+  const { error: errorInsert } = await supabase.from("operativa_personal").insert(filas);
+
+  if (errorInsert) {
+    throw new Error("No se pudo guardar el Personal mensual en Operativa");
+  }
+}
+
 export async function guardarNotaVariaPersistida(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa

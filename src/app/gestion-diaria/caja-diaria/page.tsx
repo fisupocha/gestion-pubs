@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  guardarCajaDiariaPersistida,
+  listarCajaDiariaPersistida,
+  type RegistroCajaDiaria,
+} from "@/modules/caja/data/persistencia-caja-diaria";
+import { guardarCajaMensualDesdeGestionDiaria } from "@/modules/operativa/utils/persistencia-operativa";
 
 type DiaCaja = {
   dia: number;
@@ -34,13 +41,52 @@ type BloqueCaja = {
   totalMes: (dia: DiaCaja[]) => number;
 };
 
-const ANCHO_REFERENCIA = 1536;
-const ANCHO_TABLA_OBJETIVO = ANCHO_REFERENCIA - 46;
-const ANCHO_COLUMNA_CAJA = 120;
-const ANCHO_COLUMNA_TOTAL = 68;
-const ANCHO_COLUMNA_DIA = Math.floor(
-  (ANCHO_TABLA_OBJETIVO - ANCHO_COLUMNA_CAJA - ANCHO_COLUMNA_TOTAL) / 31
+const HOY = new Date();
+const FECHA_MINIMA_ANO = 2026;
+const FECHA_MINIMA_MES = 4;
+const MESES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+const ANOS = Array.from({ length: 5 }, (_, index) => String(FECHA_MINIMA_ANO + index));
+
+// Referencia real de oficina: viewport 1920x1080.
+// Restamos paddings y bordes del layout y dejamos un margen para la barra vertical.
+const VIEWPORT_OFICINA = 1920;
+const APP_FRAME_PADDING = 16;
+const APP_MAIN_BORDER = 2;
+const PAGE_PADDING = 12;
+const CONTENEDOR_PADDING = 8;
+const BLOQUE_BORDER = 2;
+const RESERVA_SCROLL_VERTICAL = 16;
+const ANCHO_COLUMNA_CAJA = 122;
+const ANCHO_COLUMNA_TOTAL = 74;
+const NUM_DIAS = 31;
+const ANCHO_TABLA_OBJETIVO =
+  VIEWPORT_OFICINA -
+  APP_FRAME_PADDING -
+  APP_MAIN_BORDER -
+  PAGE_PADDING -
+  CONTENEDOR_PADDING -
+  BLOQUE_BORDER -
+  RESERVA_SCROLL_VERTICAL;
+const ANCHO_DIAS_DISPONIBLE = ANCHO_TABLA_OBJETIVO - ANCHO_COLUMNA_CAJA - ANCHO_COLUMNA_TOTAL;
+const ANCHO_BASE_DIA = Math.floor(ANCHO_DIAS_DISPONIBLE / NUM_DIAS);
+const RESTO_DIAS = ANCHO_DIAS_DISPONIBLE - ANCHO_BASE_DIA * NUM_DIAS;
+const ANCHOS_DIAS = Array.from({ length: NUM_DIAS }, (_, index) =>
+  ANCHO_BASE_DIA + (index < RESTO_DIAS ? 1 : 0)
 );
+const GRID_ALTURAS_BLOQUES = "5fr 5fr 3fr 2fr";
 
 const bloquesCaja: BloqueCaja[] = [
   {
@@ -76,7 +122,7 @@ const bloquesCaja: BloqueCaja[] = [
     filas: [
       { id: "ct", label: "Taquilla", tipo: "editable", campo: "cueTaquilla" },
       { id: "cbg", label: "Barra grande", tipo: "editable", campo: "cueBarraGrande" },
-      { id: "cbp", label: "Barra pequeña", tipo: "editable", campo: "cueBarraPequena" },
+      { id: "cbp", label: "Barra pequena", tipo: "editable", campo: "cueBarraPequena" },
       {
         id: "total_cue",
         label: "Total Cue",
@@ -137,13 +183,64 @@ function parseImporte(value: string) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function etiquetaDia(dia: number) {
-  const nombres = ["D", "L", "M", "X", "J", "V", "S"];
-  const fecha = new Date(Date.UTC(2026, 0, dia));
-  return `${nombres[fecha.getUTCDay()]} ${String(dia).padStart(2, "0")}`;
+function formatearEditable(value: string) {
+  const limpio = value.trim();
+
+  if (!limpio) {
+    return "";
+  }
+
+  const numero = parseImporte(limpio);
+  const tieneDecimales = limpio.includes(",");
+
+  return numero.toLocaleString("es-ES", {
+    minimumFractionDigits: tieneDecimales ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
 }
 
-function crearDia(dia: number, valores?: Partial<DiaCaja>): DiaCaja {
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function diasMes(ano: number, mes: number) {
+  return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+}
+
+function resolverPeriodoInicial() {
+  const anoActual = HOY.getFullYear();
+  const mesActual = HOY.getMonth() + 1;
+
+  if (
+    anoActual < FECHA_MINIMA_ANO ||
+    (anoActual === FECHA_MINIMA_ANO && mesActual < FECHA_MINIMA_MES)
+  ) {
+    return { ano: FECHA_MINIMA_ANO, mes: FECHA_MINIMA_MES };
+  }
+
+  return { ano: anoActual, mes: mesActual };
+}
+
+function mesesDisponibles(ano: number) {
+  const mesInicio = ano === FECHA_MINIMA_ANO ? FECHA_MINIMA_MES : 1;
+  return MESES.map((mes, index) => ({ mes, value: index + 1 })).filter((item) => item.value >= mesInicio);
+}
+
+function fechaIso(ano: number, mes: number, dia: number) {
+  return `${ano}-${pad2(mes)}-${pad2(dia)}`;
+}
+
+function ultimoDiaMesIso(ano: number, mes: number) {
+  return fechaIso(ano, mes, diasMes(ano, mes));
+}
+
+function etiquetaDia(dia: number, mes: number, ano: number) {
+  const nombres = ["D", "L", "M", "X", "J", "V", "S"];
+  const fecha = new Date(Date.UTC(ano, mes - 1, dia));
+  return `${nombres[fecha.getUTCDay()]} ${pad2(dia)}`;
+}
+
+function crearDia(dia: number, valores?: Partial<Omit<DiaCaja, "dia">>): DiaCaja {
   return {
     dia,
     tarantinoTaquilla: "",
@@ -157,88 +254,122 @@ function crearDia(dia: number, valores?: Partial<DiaCaja>): DiaCaja {
   };
 }
 
-function crearMesDemo() {
-  const dias = Array.from({ length: 31 }, (_, index) => crearDia(index + 1));
-
-  dias[0] = crearDia(1, {
-    tarantinoTaquilla: "820",
-    tarantinoTaran: "1460",
-    tarantinoSmoking: "315",
-    cueTaquilla: "540",
-    cueBarraGrande: "1220",
-    cueBarraPequena: "420",
-    hangar: "680",
-  });
-
-  dias[1] = crearDia(2, {
-    tarantinoTaquilla: "760",
-    tarantinoTaran: "1180",
-    tarantinoSmoking: "280",
-    cueTaquilla: "490",
-    cueBarraGrande: "1060",
-    cueBarraPequena: "360",
-    hangar: "610",
-  });
-
-  dias[4] = crearDia(5, {
-    tarantinoTaquilla: "910",
-    tarantinoTaran: "1620",
-    tarantinoSmoking: "340",
-    cueTaquilla: "610",
-    cueBarraGrande: "1480",
-    cueBarraPequena: "470",
-    hangar: "790",
-  });
-
-  dias[9] = crearDia(10, {
-    tarantinoTaquilla: "880",
-    tarantinoTaran: "1510",
-    tarantinoSmoking: "325",
-    cueTaquilla: "575",
-    cueBarraGrande: "1330",
-    cueBarraPequena: "445",
-    hangar: "740",
-  });
-
-  dias[14] = crearDia(15, {
-    tarantinoTaquilla: "640",
-    tarantinoTaran: "980",
-    tarantinoSmoking: "210",
-    cueTaquilla: "430",
-    cueBarraGrande: "860",
-    cueBarraPequena: "290",
-    hangar: "520",
-  });
-
-  dias[20] = crearDia(21, {
-    tarantinoTaquilla: "970",
-    tarantinoTaran: "1740",
-    tarantinoSmoking: "360",
-    cueTaquilla: "630",
-    cueBarraGrande: "1560",
-    cueBarraPequena: "490",
-    hangar: "840",
-  });
-
-  dias[27] = crearDia(28, {
-    tarantinoTaquilla: "1040",
-    tarantinoTaran: "1890",
-    tarantinoSmoking: "410",
-    cueTaquilla: "720",
-    cueBarraGrande: "1680",
-    cueBarraPequena: "530",
-    hangar: "910",
-  });
-
-  return dias;
+function crearMesVacio(ano: number, mes: number) {
+  return Array.from({ length: diasMes(ano, mes) }, (_, index) => crearDia(index + 1));
 }
 
 export default function CajaDiariaPage() {
-  const [dias, setDias] = useState<DiaCaja[]>(() => crearMesDemo());
+  const periodoInicial = resolverPeriodoInicial();
+  const [mesSeleccionado, setMesSeleccionado] = useState(() => pad2(periodoInicial.mes));
+  const [anoSeleccionado, setAnoSeleccionado] = useState(() => String(periodoInicial.ano));
+  const [dias, setDias] = useState(() => crearMesVacio(periodoInicial.ano, periodoInicial.mes));
+  const [snapshotGuardado, setSnapshotGuardado] = useState(() =>
+    JSON.stringify(crearMesVacio(periodoInicial.ano, periodoInicial.mes))
+  );
+  const [mensajeEstado, setMensajeEstado] = useState("Mes vacio. Puedes empezar a rellenar.");
+  const [cargandoMes, setCargandoMes] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [guardandoOperativa, setGuardandoOperativa] = useState(false);
   const [celdaActiva, setCeldaActiva] = useState<{
     dia: number;
     campo: CampoEditable;
   } | null>(null);
+
+  const mesNumero = Number(mesSeleccionado);
+  const anoNumero = Number(anoSeleccionado);
+  const mesesAnoSeleccionado = useMemo(() => mesesDisponibles(anoNumero), [anoNumero]);
+  const snapshotActual = useMemo(() => JSON.stringify(dias), [dias]);
+  const hayCambiosSinGuardar = snapshotActual !== snapshotGuardado;
+
+  const tituloMes = useMemo(() => {
+    return `${(MESES[mesNumero - 1] ?? "").toUpperCase()} ${anoSeleccionado}`;
+  }, [anoSeleccionado, mesNumero]);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarMes() {
+      setCargandoMes(true);
+
+      try {
+        const fechaDesde = fechaIso(anoNumero, mesNumero, 1);
+        const fechaHasta = fechaIso(anoNumero, mesNumero, diasMes(anoNumero, mesNumero));
+        const guardados = await listarCajaDiariaPersistida(fechaDesde, fechaHasta);
+
+        if (cancelado) {
+          return;
+        }
+
+        const base = crearMesVacio(anoNumero, mesNumero);
+        const porFecha = new Map(guardados.map((item) => [item.fecha, item]));
+        const siguientes = base.map((item) => {
+          const guardado = porFecha.get(fechaIso(anoNumero, mesNumero, item.dia));
+
+          if (!guardado) {
+            return item;
+          }
+
+          return {
+            dia: item.dia,
+            tarantinoTaquilla: guardado.tarantinoTaquilla,
+            tarantinoTaran: guardado.tarantinoTaran,
+            tarantinoSmoking: guardado.tarantinoSmoking,
+            cueTaquilla: guardado.cueTaquilla,
+            cueBarraGrande: guardado.cueBarraGrande,
+            cueBarraPequena: guardado.cueBarraPequena,
+            hangar: guardado.hangar,
+          };
+        });
+
+        setDias(siguientes);
+        setSnapshotGuardado(JSON.stringify(siguientes));
+        setMensajeEstado(
+          guardados.length > 0
+            ? "Mes cargado desde BBDD."
+            : "Mes vacio. Puedes empezar a rellenar."
+        );
+      } catch (error) {
+        console.error("No se pudo cargar la caja diaria", error);
+
+        if (cancelado) {
+          return;
+        }
+
+        const vacio = crearMesVacio(anoNumero, mesNumero);
+        setDias(vacio);
+        setSnapshotGuardado(JSON.stringify(vacio));
+        setMensajeEstado("No se pudo cargar la caja diaria. Revisa el SQL nuevo en Supabase.");
+      } finally {
+        if (!cancelado) {
+          setCargandoMes(false);
+        }
+      }
+    }
+
+    void cargarMes();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [anoNumero, mesNumero]);
+
+  function aplicarPeriodo(nextMes: string, nextAno: string) {
+    if (nextMes === mesSeleccionado && nextAno === anoSeleccionado) {
+      return;
+    }
+
+    if (
+      hayCambiosSinGuardar &&
+      !window.confirm(
+        "Hay cambios sin guardar en la caja diaria. Si cambias de mes o ano se perderan en pantalla.\n\nQuieres continuar?"
+      )
+    ) {
+      return;
+    }
+
+    setMesSeleccionado(nextMes);
+    setAnoSeleccionado(nextAno);
+  }
 
   function cambiarCelda(dia: number, campo: CampoEditable, valor: string) {
     setDias((actual) =>
@@ -253,19 +384,63 @@ export default function CajaDiariaPage() {
     );
   }
 
-  function formatearEditable(value: string) {
-    const limpio = value.trim();
-    if (!limpio) {
-      return "";
+  async function guardarMes() {
+    try {
+      setGuardando(true);
+
+      const registros: RegistroCajaDiaria[] = dias.map((dia) => ({
+        fecha: fechaIso(anoNumero, mesNumero, dia.dia),
+        tarantinoTaquilla: dia.tarantinoTaquilla,
+        tarantinoTaran: dia.tarantinoTaran,
+        tarantinoSmoking: dia.tarantinoSmoking,
+        cueTaquilla: dia.cueTaquilla,
+        cueBarraGrande: dia.cueBarraGrande,
+        cueBarraPequena: dia.cueBarraPequena,
+        hangar: dia.hangar,
+      }));
+
+      await guardarCajaDiariaPersistida(registros);
+      setSnapshotGuardado(snapshotActual);
+      setMensajeEstado("Caja diaria guardada en BBDD.");
+      window.alert("Caja diaria guardada.");
+    } catch (error) {
+      console.error("No se pudo guardar la caja diaria", error);
+      window.alert("No se pudo guardar la caja diaria. Revisa el SQL nuevo en Supabase.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function guardarEnOperativaCaja() {
+    if (hayCambiosSinGuardar) {
+      window.alert("Guarda antes la Caja diaria para pasar a Operativa Caja.");
+      return;
     }
 
-    const numero = parseImporte(limpio);
-    const tieneDecimales = limpio.includes(",");
+    if (
+      !window.confirm(
+        `Se va a actualizar Operativa Caja de ${MESES[mesNumero - 1]} ${anoNumero} con los totales guardados de Tarantino, Cue y Hangar.\n\nQuieres continuar?`
+      )
+    ) {
+      return;
+    }
 
-    return numero.toLocaleString("es-ES", {
-      minimumFractionDigits: tieneDecimales ? 2 : 0,
-      maximumFractionDigits: 2,
-    });
+    try {
+      setGuardandoOperativa(true);
+
+      await guardarCajaMensualDesdeGestionDiaria(ultimoDiaMesIso(anoNumero, mesNumero), [
+        { local: "Tarantino", totalCaja: bloquesCaja[0]?.totalMes(dias) ?? 0 },
+        { local: "Cue", totalCaja: bloquesCaja[1]?.totalMes(dias) ?? 0 },
+        { local: "Hangar", totalCaja: bloquesCaja[2]?.totalMes(dias) ?? 0 },
+      ]);
+
+      window.alert("Operativa Caja actualizada.");
+    } catch (error) {
+      console.error("No se pudo actualizar Operativa Caja", error);
+      window.alert("No se pudo actualizar Operativa Caja.");
+    } finally {
+      setGuardandoOperativa(false);
+    }
   }
 
   const totalMes = useMemo(() => {
@@ -298,59 +473,116 @@ export default function CajaDiariaPage() {
   }, [dias]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-1.5 overflow-hidden p-1.5">
+    <section className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-1.5 overflow-hidden p-1.5">
       <header className="rounded-[12px] border border-[#d8b4aa] bg-[linear-gradient(180deg,#f8efec_0%,#f2e6e2_100%)] px-2 py-1 shadow-[0_8px_16px_rgba(85,52,46,0.08)]">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div>
             <div className="text-[8px] font-black uppercase tracking-[0.14em] text-[#8a6458]">
-              Gestión diaria
+              Gestion diaria
             </div>
             <h1 className="mt-0.5 text-base font-black text-[#4b312b]">Caja diaria</h1>
           </div>
 
           <div className="text-center">
             <div className="text-[24px] font-black uppercase tracking-[0.14em] text-[#5a3b34]">
-              Enero 2026
+              {tituloMes}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <Link
               href="/gestion-diaria/empleados"
               className="rounded-[10px] border border-[#cfafa8] bg-[linear-gradient(180deg,#fffdfc_0%,#eedfda_100%)] px-2.5 py-1 text-[10px] font-semibold text-[#492f29] shadow-[0_6px_12px_rgba(85,52,46,0.08)] transition duration-150 hover:-translate-y-[1px] hover:border-[#c28779]"
             >
               Volver
             </Link>
-
-            <div className="rounded-[10px] border border-[#d1a79d] bg-[linear-gradient(180deg,#fdf9f8_0%,#ede1dd_100%)] px-2 py-1 text-center shadow-[0_6px_12px_rgba(85,52,46,0.08)]">
-              <div className="text-[9px] font-semibold text-[#7b635c]">
-                Solo prueba ficticia
-              </div>
-            </div>
           </div>
         </div>
       </header>
 
       <section className="rounded-[12px] border border-[#d1a79d] bg-[linear-gradient(180deg,#fefaf9_0%,#efe4df_100%)] px-2 py-1 shadow-[0_8px_16px_rgba(85,52,46,0.08)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[8px] font-black uppercase tracking-[0.12em] text-[#8a6458]">
-            Tres módulos independientes · sin guardar en BBDD
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[8px] font-black uppercase tracking-[0.12em] text-[#8a6458]">
+              Mes
+            </label>
+            <select
+              value={mesSeleccionado}
+              onChange={(e) => aplicarPeriodo(e.target.value, anoSeleccionado)}
+              className="rounded-[8px] border border-[#d0aba1] bg-white px-2 py-1 text-[10px] font-semibold text-[#4b312b] outline-none"
+            >
+              {mesesAnoSeleccionado.map((item) => (
+                <option key={`${anoNumero}-${item.value}`} value={pad2(item.value)}>
+                  {item.mes}
+                </option>
+              ))}
+            </select>
+
+            <label className="ml-1 text-[8px] font-black uppercase tracking-[0.12em] text-[#8a6458]">
+              Ano
+            </label>
+            <select
+              value={anoSeleccionado}
+              onChange={(e) => {
+                const nextAno = e.target.value;
+                const disponibles = mesesDisponibles(Number(nextAno));
+                const mesSigueValido = disponibles.some((item) => pad2(item.value) === mesSeleccionado);
+                const nextMes = mesSigueValido ? mesSeleccionado : pad2(disponibles[0]?.value ?? FECHA_MINIMA_MES);
+                aplicarPeriodo(nextMes, nextAno);
+              }}
+              className="rounded-[8px] border border-[#d0aba1] bg-white px-2 py-1 text-[10px] font-semibold text-[#4b312b] outline-none"
+            >
+              {ANOS.map((ano) => (
+                <option key={ano} value={ano}>
+                  {ano}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="text-[10px] font-semibold text-[#5a433d]">
-            Total <span className="font-black">{fmtImporte(totalMes)}</span>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="rounded-[8px] border border-[#d1a79d] bg-white/70 px-2 py-1 text-[9px] font-semibold text-[#5a433d]">
+              {cargandoMes
+                ? "Cargando..."
+                : hayCambiosSinGuardar
+                  ? "Cambios sin guardar"
+                  : mensajeEstado}
+            </div>
+            <div className="text-[10px] font-semibold text-[#5a433d]">
+              Total <span className="font-black">{fmtImporte(totalMes)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={guardarMes}
+              disabled={guardando || guardandoOperativa || cargandoMes}
+              className="rounded-[10px] border border-[#7c564d] bg-[#4a2d28] px-2.5 py-1 text-[10px] font-black text-white shadow-[0_6px_12px_rgba(85,52,46,0.16)] transition duration-150 hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+            <button
+              type="button"
+              onClick={guardarEnOperativaCaja}
+              disabled={guardandoOperativa || guardando || cargandoMes}
+              className="rounded-[10px] border border-[#cfafa8] bg-[linear-gradient(180deg,#fffdfc_0%,#eedfda_100%)] px-2.5 py-1 text-[10px] font-black text-[#492f29] shadow-[0_6px_12px_rgba(85,52,46,0.08)] transition duration-150 hover:-translate-y-[1px] hover:border-[#c28779] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {guardandoOperativa ? "Guardando en Caja..." : "Guardar en Caja"}
+            </button>
           </div>
         </div>
       </section>
 
-      <section className="min-h-0 flex-1 overflow-y-auto rounded-[14px] border border-[#d1a79d] bg-[linear-gradient(180deg,#fefaf9_0%,#efe4df_100%)] p-1 shadow-[0_14px_24px_rgba(85,52,46,0.10)]">
-        <div className="grid gap-2">
+      <section className="min-h-0 overflow-hidden rounded-[14px] border border-[#d1a79d] bg-[linear-gradient(180deg,#fefaf9_0%,#efe4df_100%)] p-1 shadow-[0_14px_24px_rgba(85,52,46,0.10)]">
+        <div
+          className="grid h-full min-h-0 gap-2"
+          style={{ gridTemplateRows: GRID_ALTURAS_BLOQUES }}
+        >
           {bloquesCaja.map((bloque) => {
             const totalBloqueMes = bloque.totalMes(dias);
 
             return (
               <section
                 key={bloque.id}
-                className="rounded-[14px] border border-[#d7b6ad] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e5e0_100%)] shadow-[0_8px_14px_rgba(85,52,46,0.08)]"
+                className="flex min-h-0 flex-col overflow-hidden rounded-[14px] border border-[#d7b6ad] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e5e0_100%)] shadow-[0_8px_14px_rgba(85,52,46,0.08)]"
               >
                 <div className="border-b border-[#dfc2ba] px-2 py-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -363,9 +595,9 @@ export default function CajaDiariaPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
                   <table
-                    className="border-collapse text-[9px] text-[#4b312b]"
+                    className="h-full border-collapse text-[9px] text-[#4b312b]"
                     style={{
                       width: `${ANCHO_TABLA_OBJETIVO}px`,
                       minWidth: `${ANCHO_TABLA_OBJETIVO}px`,
@@ -374,10 +606,10 @@ export default function CajaDiariaPage() {
                   >
                     <colgroup>
                       <col style={{ width: `${ANCHO_COLUMNA_CAJA}px` }} />
-                      {dias.map((dia) => (
+                      {Array.from({ length: NUM_DIAS }, (_, index) => (
                         <col
-                          key={`${bloque.id}-col-${dia.dia}`}
-                          style={{ width: `${ANCHO_COLUMNA_DIA}px` }}
+                          key={`${bloque.id}-col-${index + 1}`}
+                          style={{ width: `${ANCHOS_DIAS[index] ?? ANCHO_BASE_DIA}px` }}
                         />
                       ))}
                       <col style={{ width: `${ANCHO_COLUMNA_TOTAL}px` }} />
@@ -387,14 +619,19 @@ export default function CajaDiariaPage() {
                         <th className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[#f4e7e2] px-1.5 py-1.5 text-left">
                           Caja
                         </th>
-                        {dias.map((dia) => (
-                          <th
-                            key={`${bloque.id}-${dia.dia}`}
-                            className="border-r border-[#e4ccc4] px-0 py-1.5 text-center"
-                          >
-                            {etiquetaDia(dia.dia)}
-                          </th>
-                        ))}
+                        {Array.from({ length: NUM_DIAS }, (_, index) => {
+                          const dia = index + 1;
+                          const visible = dia <= dias.length;
+
+                          return (
+                            <th
+                              key={`${bloque.id}-${dia}`}
+                              className="border-r border-[#e4ccc4] px-0 py-1.5 text-center"
+                            >
+                              {visible ? etiquetaDia(dia, mesNumero, anoNumero) : ""}
+                            </th>
+                          );
+                        })}
                         <th className="px-1 py-1.5 text-right">Total</th>
                       </tr>
                     </thead>
@@ -421,7 +658,20 @@ export default function CajaDiariaPage() {
                               {fila.label}
                             </td>
 
-                            {dias.map((dia) => {
+                            {Array.from({ length: NUM_DIAS }, (_, index) => {
+                              const dia = dias[index];
+
+                              if (!dia) {
+                                return (
+                                  <td
+                                    key={`${bloque.id}-${fila.id}-vacio-${index + 1}`}
+                                    className="border-r border-[#f0dfd9] p-[1px]"
+                                  >
+                                    <div className="rounded-[6px] bg-white/40 px-0 py-1" />
+                                  </td>
+                                );
+                              }
+
                               const valor =
                                 fila.tipo === "editable"
                                   ? dia[fila.campo]
@@ -475,11 +725,11 @@ export default function CajaDiariaPage() {
             );
           })}
 
-          <section className="rounded-[14px] border border-[#d7b6ad] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e5e0_100%)] shadow-[0_8px_14px_rgba(85,52,46,0.08)]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[14px] border border-[#d7b6ad] bg-[linear-gradient(180deg,#fffaf8_0%,#f1e5e0_100%)] shadow-[0_8px_14px_rgba(85,52,46,0.08)]">
             <div className="border-b border-[#dfc2ba] px-2 py-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[9px] font-black uppercase tracking-[0.1em] text-[#7f5b52]">
-                  Total día
+                  Total dia
                 </div>
                 <div className="text-[9px] font-semibold text-[#6e564f]">
                   Total <span className="font-black">{fmtImporte(totalMes)}</span>
@@ -487,9 +737,9 @@ export default function CajaDiariaPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
               <table
-                className="border-collapse text-[9px] text-[#4b312b]"
+                className="h-full border-collapse text-[9px] text-[#4b312b]"
                 style={{
                   width: `${ANCHO_TABLA_OBJETIVO}px`,
                   minWidth: `${ANCHO_TABLA_OBJETIVO}px`,
@@ -498,10 +748,10 @@ export default function CajaDiariaPage() {
               >
                 <colgroup>
                   <col style={{ width: `${ANCHO_COLUMNA_CAJA}px` }} />
-                  {dias.map((dia) => (
+                  {Array.from({ length: NUM_DIAS }, (_, index) => (
                     <col
-                      key={`total-dia-col-${dia.dia}`}
-                      style={{ width: `${ANCHO_COLUMNA_DIA}px` }}
+                      key={`total-dia-col-${index + 1}`}
+                      style={{ width: `${ANCHOS_DIAS[index] ?? ANCHO_BASE_DIA}px` }}
                     />
                   ))}
                   <col style={{ width: `${ANCHO_COLUMNA_TOTAL}px` }} />
@@ -511,32 +761,41 @@ export default function CajaDiariaPage() {
                     <th className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[#f4e7e2] px-1.5 py-1.5 text-left">
                       Resumen
                     </th>
-                    {dias.map((dia) => (
-                      <th
-                        key={`total-dia-${dia.dia}`}
-                        className="border-r border-[#e4ccc4] px-0 py-1.5 text-center"
-                      >
-                        {etiquetaDia(dia.dia)}
-                      </th>
-                    ))}
+                    {Array.from({ length: NUM_DIAS }, (_, index) => {
+                      const dia = index + 1;
+                      const visible = dia <= dias.length;
+
+                      return (
+                        <th
+                          key={`total-dia-${dia}`}
+                          className="border-r border-[#e4ccc4] px-0 py-1.5 text-center"
+                        >
+                          {visible ? etiquetaDia(dia, mesNumero, anoNumero) : ""}
+                        </th>
+                      );
+                    })}
                     <th className="px-1 py-1.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t border-[#d9b8ae] bg-[linear-gradient(180deg,#fffdfc_0%,#f1e4de_100%)]">
                     <td className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 font-black">
-                      Total día
+                      Total dia
                     </td>
-                    {totalesDia.map((item) => (
-                      <td
-                        key={`total-dia-valor-${item.dia}`}
-                        className="border-r border-[#f0dfd9] p-[1px]"
-                      >
-                        <div className="rounded-[6px] bg-white/60 px-0 py-1 text-center text-[9px] font-black">
-                          {item.total === 0 ? "" : fmtImporte(item.total).replace(",00", "")}
-                        </div>
-                      </td>
-                    ))}
+                    {Array.from({ length: NUM_DIAS }, (_, index) => {
+                      const item = totalesDia[index];
+
+                      return (
+                        <td
+                          key={`total-dia-valor-${index + 1}`}
+                          className="border-r border-[#f0dfd9] p-[1px]"
+                        >
+                          <div className="rounded-[6px] bg-white/60 px-0 py-1 text-center text-[9px] font-black">
+                            {!item || item.total === 0 ? "" : fmtImporte(item.total).replace(",00", "")}
+                          </div>
+                        </td>
+                      );
+                    })}
                     <td className="px-1 py-1.5 text-right text-[8px] font-black">
                       {fmtImporte(totalMes)}
                     </td>
