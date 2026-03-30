@@ -10,6 +10,7 @@ import {
   type AdelantoEmpleado,
   type RegistroLiquidacionMensual,
 } from "@/modules/maestros/empleados/data/persistencia-liquidacion-empleados";
+import { listarResumenCuadrantePersistido } from "@/modules/maestros/empleados/data/persistencia-cuadrante-diario";
 
 type Empleado = {
   id: number;
@@ -143,7 +144,6 @@ export function PantallaEmpleados({
   const [empleadoSeleccionadoId, setEmpleadoSeleccionadoId] = useState<number | null>(null);
   const [nombre, setNombre] = useState("");
   const [familiaId, setFamiliaId] = useState("");
-  const [precioSueldo, setPrecioSueldo] = useState("");
   const [empleadoTieneHoras, setEmpleadoTieneHoras] = useState(false);
   const [modoDerecha, setModoDerecha] = useState<"lista" | "liquidacion">("lista");
   const [liquidacionMes, setLiquidacionMes] = useState(periodoInicial.mes);
@@ -158,6 +158,13 @@ export function PantallaEmpleados({
   const [adelantoObservaciones, setAdelantoObservaciones] = useState("");
   const [guardandoAdelanto, setGuardandoAdelanto] = useState(false);
   const [guardandoPagoId, setGuardandoPagoId] = useState<number | null>(null);
+  const [listaFechaDesde, setListaFechaDesde] = useState("2026-04-01");
+  const [listaFechaHasta, setListaFechaHasta] = useState(
+    new Date().toISOString().slice(0, 10) < "2026-04-01" ? "2026-04-01" : new Date().toISOString().slice(0, 10)
+  );
+  const [preciosMediosLista, setPreciosMediosLista] = useState<Record<number, number>>({});
+  const [cargandoListaPrecios, setCargandoListaPrecios] = useState(false);
+  const [mensajeLista, setMensajeLista] = useState("");
   const nombreRef = useRef<HTMLInputElement | null>(null);
   const mesesLiquidacionDisponibles = useMemo(
     () => mesesDisponibles(liquidacionAno),
@@ -175,10 +182,10 @@ export function PantallaEmpleados({
       return (
         empleado.nombre.toLowerCase().includes(termino) ||
         empleado.familia.toLowerCase().includes(termino) ||
-        fmtMoney(empleado.precioSueldo).includes(termino)
+        fmtMoney(preciosMediosLista[empleado.id] ?? 0).includes(termino)
       );
     });
-  }, [empleados, textoBusqueda]);
+  }, [empleados, preciosMediosLista, textoBusqueda]);
   const totalSueldoMes = useMemo(
     () => filasLiquidacion.reduce((sum, fila) => sum + fila.totalSueldo, 0),
     [filasLiquidacion]
@@ -244,6 +251,59 @@ export function PantallaEmpleados({
     void cargarLiquidacionMensual();
   }, [modoDerecha, liquidacionAno, liquidacionMes]);
 
+  async function cargarPreciosLista() {
+    if (listaFechaDesde < "2026-04-01") {
+      setMensajeLista("La media real empieza en abril de 2026.");
+      setPreciosMediosLista({});
+      return;
+    }
+
+    if (listaFechaHasta < listaFechaDesde) {
+      setMensajeLista("La fecha hasta no puede ser menor que la fecha desde.");
+      setPreciosMediosLista({});
+      return;
+    }
+
+    setCargandoListaPrecios(true);
+    setMensajeLista("");
+
+    try {
+      const registros = await listarResumenCuadrantePersistido({
+        fechaDesde: listaFechaDesde,
+        fechaHasta: listaFechaHasta,
+      });
+
+      const acumulado = new Map<number, { importe: number; medias: number }>();
+      registros.forEach((registro) => {
+        const actual = acumulado.get(registro.empleadoId) ?? { importe: 0, medias: 0 };
+        actual.importe += registro.precio;
+        actual.medias += 1;
+        acumulado.set(registro.empleadoId, actual);
+      });
+
+      const precios: Record<number, number> = {};
+      empleados.forEach((empleado) => {
+        const resumen = acumulado.get(empleado.id);
+        const horas = (resumen?.medias ?? 0) * 0.5;
+        precios[empleado.id] = horas > 0 ? Math.round((resumen!.importe / horas) * 100) / 100 : 0;
+      });
+      setPreciosMediosLista(precios);
+    } catch {
+      setMensajeLista("No se pudo cargar la media real del periodo.");
+      setPreciosMediosLista({});
+    } finally {
+      setCargandoListaPrecios(false);
+    }
+  }
+
+  useEffect(() => {
+    if (modoDerecha !== "lista") {
+      return;
+    }
+
+    void cargarPreciosLista();
+  }, [modoDerecha, listaFechaDesde, listaFechaHasta, empleados]);
+
   async function guardarNuevoAdelanto() {
     const importe = parseImporte(adelantoImporte);
 
@@ -308,7 +368,6 @@ export function PantallaEmpleados({
     setEmpleadoSeleccionadoId(empleado.id);
     setNombre(empleado.nombre);
     setFamiliaId(String(empleado.familiaId));
-    setPrecioSueldo(fmtMoney(empleado.precioSueldo));
     setEmpleadoTieneHoras(empleado.tieneHoras);
   }
 
@@ -316,7 +375,6 @@ export function PantallaEmpleados({
     setEmpleadoSeleccionadoId(null);
     setNombre("");
     setFamiliaId("");
-    setPrecioSueldo("");
     setEmpleadoTieneHoras(false);
     requestAnimationFrame(() => {
       nombreRef.current?.focus();
@@ -348,7 +406,7 @@ export function PantallaEmpleados({
             </div>
             <h1 className="mt-2 text-3xl font-black text-[#4b312b]">Empleados</h1>
             <p className="mt-2 text-sm text-[#7b635c]">
-              Mantiene nombre, tipo de empleado y precio de sueldo.
+              Mantiene nombre y tipo de empleado.
             </p>
           </div>
 
@@ -401,6 +459,7 @@ export function PantallaEmpleados({
             className="flex min-h-0 flex-1 flex-col gap-4"
           >
             <input name="id" type="hidden" value={empleadoSeleccionadoId ?? ""} />
+            <input name="precioSueldo" type="hidden" value="0" />
 
             <div className="grid gap-4">
               <label className="grid gap-1.5">
@@ -431,18 +490,6 @@ export function PantallaEmpleados({
                     </option>
                   ))}
                 </select>
-              </label>
-
-              <label className="grid gap-1.5">
-                <span className={labelClassName}>Precio sueldo</span>
-                <input
-                  name="precioSueldo"
-                  type="text"
-                  value={precioSueldo}
-                  onChange={(e) => setPrecioSueldo(normalizarImporte(e.target.value))}
-                  className={inputClassName}
-                  placeholder="0,00"
-                />
               </label>
 
               {empleadoSeleccionadoId !== null && empleadoTieneHoras ? (
@@ -494,7 +541,7 @@ export function PantallaEmpleados({
                     value={textoBusqueda}
                     onChange={(e) => setTextoBusqueda(e.target.value)}
                     className="w-full rounded-2xl border border-[#d2aca3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-2 text-sm text-[#2e211d] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_6px_14px_rgba(85,52,46,0.06)] outline-none transition duration-150 hover:-translate-y-[1px] hover:border-[#c58f82] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_24px_rgba(85,52,46,0.10)] focus:-translate-y-[1px] focus:border-[#b97263] focus:bg-white focus:shadow-[0_0_0_4px_rgba(193,129,115,0.18),0_14px_26px_rgba(85,52,46,0.11)]"
-                    placeholder="Nombre, tipo o precio"
+                    placeholder="Nombre, familia o precio hora"
                   />
                 </label>
 
@@ -543,17 +590,52 @@ export function PantallaEmpleados({
 
           {modoDerecha === "lista" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-              <div className="grid grid-cols-[1.3fr_0.9fr_0.7fr_auto] gap-3 border-b border-[#e3cbc4] px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#8a6458]">
+              <div className="grid gap-3 border-b border-[#e3cbc4] px-5 py-3">
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <label className="grid gap-1.5">
+                    <span className={labelClassName}>Desde</span>
+                    <input
+                      type="date"
+                      min="2026-04-01"
+                      max={listaFechaHasta}
+                      value={listaFechaDesde}
+                      onChange={(e) => setListaFechaDesde(e.target.value)}
+                      className={`${inputClassName} px-3 py-2.5`}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className={labelClassName}>Hasta</span>
+                    <input
+                      type="date"
+                      min={listaFechaDesde < "2026-04-01" ? "2026-04-01" : listaFechaDesde}
+                      value={listaFechaHasta}
+                      onChange={(e) => setListaFechaHasta(e.target.value)}
+                      className={`${inputClassName} px-3 py-2.5`}
+                    />
+                  </label>
+                </div>
+
+                {mensajeLista ? (
+                  <div className="rounded-[16px] border border-[#d3a2a0] bg-[linear-gradient(180deg,#f6e3e2_0%,#ecd0cf_100%)] px-4 py-2 text-sm font-medium text-[#7a2f2c]">
+                    {mensajeLista}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-[1.45fr_1fr_0.8fr] gap-3 border-b border-[#e3cbc4] px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#8a6458]">
                 <span>Nombre</span>
-                <span>Tipo</span>
-                <span>Precio</span>
-                <span>ID</span>
+                <span>Familia</span>
+                <span>Precio hora</span>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {empleadosFiltrados.length === 0 ? (
                   <div className="px-5 py-8 text-center text-sm text-[#856f69]">
                     No hay coincidencias.
+                  </div>
+                ) : cargandoListaPrecios ? (
+                  <div className="px-5 py-8 text-center text-sm text-[#856f69]">
+                    Cargando media real del periodo...
                   </div>
                 ) : (
                   <div className="divide-y divide-[#ead7d1]">
@@ -567,15 +649,14 @@ export function PantallaEmpleados({
                           onClick={() => seleccionarEmpleado(empleado)}
                           className={
                             seleccionado
-                              ? "grid w-full grid-cols-[1.3fr_0.9fr_0.7fr_auto] items-center gap-3 border-l-4 border-[#bd7f72] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-5 py-4 text-left text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
-                              : "grid w-full grid-cols-[1.3fr_0.9fr_0.7fr_auto] items-center gap-3 px-5 py-4 text-left text-sm text-[#3f2c28] transition duration-150 hover:bg-[rgba(232,214,206,0.6)] hover:shadow-[inset_4px_0_0_#d2a39a]"
+                              ? "grid w-full grid-cols-[1.45fr_1fr_0.8fr] items-center gap-3 border-l-4 border-[#bd7f72] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-5 py-4 text-left text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+                              : "grid w-full grid-cols-[1.45fr_1fr_0.8fr] items-center gap-3 px-5 py-4 text-left text-sm text-[#3f2c28] transition duration-150 hover:bg-[rgba(232,214,206,0.6)] hover:shadow-[inset_4px_0_0_#d2a39a]"
                           }
                         >
                           <span className="font-semibold">{empleado.nombre}</span>
                           <span className="font-medium text-[#6e5751]">{empleado.familia}</span>
-                          <span className="font-medium text-[#6e5751]">{fmtMoney(empleado.precioSueldo)}</span>
-                          <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#98786f]">
-                            ID {empleado.id}
+                          <span className="text-center font-medium text-[#6e5751]">
+                            {fmtMoney(preciosMediosLista[empleado.id] ?? 0)}
                           </span>
                         </button>
                       );
