@@ -8,7 +8,6 @@ export const itemsOperativa = [
   { href: "/creditos", label: "Créditos" },
   { href: "/impuestos", label: "Impuestos" },
   { href: "/personal", label: "Personal" },
-  { href: "/horas", label: "Horas" },
   { href: "/facturas-emitidas", label: "Facturas emitidas" },
   { href: "/caja", label: "Caja" },
 ];
