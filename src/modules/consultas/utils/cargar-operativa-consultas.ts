@@ -18,6 +18,7 @@ function normalizarRegistro(item: Record<string, unknown>): RegistroBase {
   return {
     id: Number(item.id ?? 0),
     empresa: String(item.empresa ?? ""),
+    proveedor: String(item.proveedor ?? ""),
     fechaFactura: String(item.fechaFactura ?? ""),
     tipo: String(item.tipo ?? ""),
     familia: String(item.familia ?? ""),

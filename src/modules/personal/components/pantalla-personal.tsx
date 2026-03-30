@@ -528,6 +528,9 @@ export function PantallaPersonal({
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
+        proveedor: "",
+        numeroFactura: "",
+        base21: "",
         adjunto: archivoAdjunto,
       };
 
@@ -911,8 +914,9 @@ export function PantallaPersonal({
               <Campo label="Proveedor">
                 <select
                   value={formulario.proveedor}
-                  onChange={(e) => cambiarCampo("proveedor", e.target.value)}
-                  className={inputClassName}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
                   <option value="">Selecciona proveedor</option>
                   {opcionesProveedor.map((item) => (
@@ -936,9 +940,10 @@ export function PantallaPersonal({
                 <input
                   ref={numeroFacturaRef}
                   value={formulario.numeroFactura}
-                  onChange={(e) => cambiarCampo("numeroFactura", e.target.value)}
+                  disabled
+                  aria-disabled="true"
                   type="text"
-                  className={inputClassName}
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 />
               </Campo>
             </div>
@@ -1039,11 +1044,12 @@ export function PantallaPersonal({
                 <input
                   ref={base21Ref}
                   value={formulario.base21}
-                  onChange={(e) => cambiarImporte("base21", e.target.value)}
+                  disabled
+                  aria-disabled="true"
                   type="text"
                   inputMode="decimal"
                   placeholder="0,00"
-                  className={`${inputClassName} py-1.5 2xl:py-2`}
+                  className={`${inputClassName} ${campoDeshabilitadoClassName} py-1.5 2xl:py-2`}
                 />
               </Campo>
             </div>

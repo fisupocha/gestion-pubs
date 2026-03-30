@@ -8,6 +8,7 @@ import type { RepartoRiverocioManual } from "@/modules/consultas/utils/reparto-r
 export type RegistroBase = {
   id: number;
   empresa: string;
+  proveedor?: string;
   fechaFactura: string;
   tipo: string;
   familia: string;
@@ -185,12 +186,35 @@ function tipoLabel(clasificacion: ClasificacionMapa, tipoKey: string) {
   return clasificacion[tipoKey]?.label ?? tipoKey;
 }
 
+function excluirFacturaRecibidaSeguridadRiverocio(
+  origen: Movimiento["origen"],
+  registro: RegistroBase,
+  clasificacion: ClasificacionMapa
+) {
+  if (origen !== "facturas-recibidas") return false;
+
+  const proveedor = norm(registro.proveedor);
+  const tipo = norm(tipoLabel(clasificacion, registro.tipo));
+  const familia = norm(familyLabel(clasificacion, registro.tipo, registro.familia));
+
+  return (
+    proveedor === "iim-control acceso sl" &&
+    esLocalEmpresa(registro.empresa) &&
+    tipo === "personal" &&
+    familia === "seguridad"
+  );
+}
+
 function mkMovimiento(
   origen: Movimiento["origen"],
   clase: Movimiento["clase"],
   registro: RegistroBase,
   clasificacion: ClasificacionMapa
 ) {
+  if (excluirFacturaRecibidaSeguridadRiverocio(origen, registro, clasificacion)) {
+    return null;
+  }
+
   let totales = { sinIva: 0, conIva: 0, iva: 0 };
 
   switch (origen) {
@@ -270,7 +294,7 @@ export function obtenerMovimientosConsulta(
     ...operativa.notasVarias.map((r) =>
       mkMovimiento("notas-varias", "gasto", r as unknown as RegistroBase, clasificacion)
     ),
-  ];
+  ].filter((item): item is Movimiento => item !== null);
 }
 
 export function obtenerLocalesDisponibles(
