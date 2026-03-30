@@ -23,6 +23,7 @@ export const itemsMaestros = [
 export const itemsGestionDiaria = [
   { href: "/gestion-diaria/empleados", label: "Empleados" },
   { href: "/gestion-diaria/caja-diaria", label: "Caja diaria" },
+  { href: "/gestion-diaria/punteo-banco", label: "Punteo banco" },
 ];
 
 export const itemConsultas = { href: "/consultas", label: "Consultas" };

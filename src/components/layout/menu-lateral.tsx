@@ -18,18 +18,22 @@ function MenuLink({
   label,
   activo,
   onClick,
+  abrirEnNuevaPestana = false,
   className = "",
 }: {
   href: string;
   label: string;
   activo: boolean;
   onClick?: () => void;
+  abrirEnNuevaPestana?: boolean;
   className?: string;
 }) {
   return (
     <Link
       href={href}
       onClick={onClick}
+      target={abrirEnNuevaPestana ? "_blank" : undefined}
+      rel={abrirEnNuevaPestana ? "noreferrer" : undefined}
       className={
         activo
           ? `flex h-full w-full items-center rounded-xl border border-[#cdb08b] bg-[linear-gradient(180deg,#fff3dc_0%,#e8cfab_100%)] px-3.5 text-[15px] font-bold text-[#221815] shadow-[0_10px_20px_rgba(19,13,10,0.18)] ${className}`
@@ -97,6 +101,7 @@ function MenuBox({
               label={item.label}
               activo={pathname === item.href}
               onClick={onItemClick}
+              abrirEnNuevaPestana={item.href === "/gestion-diaria/punteo-banco"}
               className={itemClassName}
             />
           ))}
@@ -114,7 +119,8 @@ export function MenuLateral() {
     pathname === "/consultas/reparto-riverocio" ||
     pathname.startsWith("/maestros/empleados/cuadrante-demo") ||
     pathname.startsWith("/gestion-diaria/empleados/cuadrante-demo") ||
-    pathname.startsWith("/gestion-diaria/caja-diaria")
+    pathname.startsWith("/gestion-diaria/caja-diaria") ||
+    pathname.startsWith("/gestion-diaria/punteo-banco")
   ) {
     return null;
   }
