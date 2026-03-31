@@ -47,14 +47,39 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
+const TIPO_FIJO_CREDITO = "fijos";
+const ETIQUETAS_FAMILIA_CREDITO = ["Creditos", "Créditos"] as const;
+
+function normalizarTexto(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function resolverFamiliaCredito(clasificacion: ClasificacionMapa) {
+  const familias = clasificacion[TIPO_FIJO_CREDITO]?.familias ?? {};
+  const entrada = Object.entries(familias).find(([, item]) =>
+    ETIQUETAS_FAMILIA_CREDITO.some(
+      (etiqueta) => normalizarTexto(item.label) === normalizarTexto(etiqueta)
+    )
+  );
+
+  return {
+    id: entrada?.[0] ?? "creditos",
+    label: entrada?.[1]?.label ?? "Creditos",
+  };
+}
+
 function crearFormularioInicial(formaPago = ""): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
     fechaFactura: "",
     numeroFactura: "",
-    tipo: "",
-    familia: "",
+    tipo: TIPO_FIJO_CREDITO,
+    familia: "creditos",
     subfamilia: "",
     base0: "",
     base4: "",
@@ -78,9 +103,9 @@ function formularioDesdeRegistro(
     proveedor: registro.proveedor,
     fechaFactura: registro.fechaFactura,
     numeroFactura: registro.numeroFactura,
-    tipo: registro.tipo,
-    familia: registro.familia,
-    subfamilia: registro.subfamilia,
+    tipo: TIPO_FIJO_CREDITO,
+    familia: "creditos",
+    subfamilia: "",
     base0: registro.base0,
     base4: registro.base4,
     base10: registro.base10,
@@ -236,6 +261,11 @@ export function PantallaCreditos({
     opcionesFormaPago.find((item) => item.localeCompare("BANCO", "es", { sensitivity: "base" }) === 0) ??
     opcionesFormaPago[0] ??
     "";
+  const familiaCredito = useMemo(
+    () => resolverFamiliaCredito(clasificacionActiva),
+    [clasificacionActiva]
+  );
+  const tipoLabelFijo = clasificacionActiva[TIPO_FIJO_CREDITO]?.label ?? "Fijos";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -330,38 +360,6 @@ export function PantallaCreditos({
     };
   }, [clasificacionActiva, formaPagoFija]);
 
-  const familiasDisponibles = useMemo(() => {
-    if (!formulario.tipo) {
-      return [];
-    }
-
-    const tipoConfig = clasificacionActiva[formulario.tipo];
-    if (!tipoConfig) {
-      return [];
-    }
-
-    return Object.entries(tipoConfig.familias).map(([id, item]) => ({
-      id,
-      label: item.label,
-    }));
-  }, [clasificacionActiva, formulario.tipo]);
-
-  const subfamiliasDisponibles = useMemo(() => {
-    if (!formulario.tipo || !formulario.familia) {
-      return [];
-    }
-
-    const familias = (clasificacionActiva[formulario.tipo]?.familias ?? {}) as Record<
-      string,
-      {
-        label: string;
-        subfamilias: readonly string[];
-      }
-    >;
-
-    return [...(familias[formulario.familia]?.subfamilias ?? [])];
-  }, [clasificacionActiva, formulario.familia, formulario.tipo]);
-
   const base0 = parseDecimal(formulario.base0);
   const base4 = parseDecimal(formulario.base4);
   const base10 = parseDecimal(formulario.base10);
@@ -379,8 +377,6 @@ export function PantallaCreditos({
   const formularioValido =
     Boolean(formulario.empresa) &&
     Boolean(formulario.fechaFactura) &&
-    Boolean(formulario.tipo) &&
-    Boolean(formulario.familia) &&
     totalCredito !== 0;
 
   useEffect(() => {
@@ -433,23 +429,6 @@ export function PantallaCreditos({
       ...prev,
       [campo]: valor,
       ...(campo === "fechaFactura" ? { fechaPago: String(valor) } : {}),
-    }));
-  }
-
-  function cambiarTipo(nextTipo: TipoClasificacion) {
-    setFormulario((prev) => ({
-      ...prev,
-      tipo: nextTipo,
-      familia: "",
-      subfamilia: "",
-    }));
-  }
-
-  function cambiarFamilia(nextFamilia: string) {
-    setFormulario((prev) => ({
-      ...prev,
-      familia: nextFamilia,
-      subfamilia: "",
     }));
   }
 
@@ -535,11 +514,6 @@ export function PantallaCreditos({
       return;
     }
 
-    if (!formulario.tipo || !formulario.familia) {
-      window.alert("Tipo y Familia son obligatorios.");
-      return;
-    }
-
     if (totalCredito === 0) {
       window.alert("El credito debe tener importe distinto de cero.");
       return;
@@ -555,6 +529,9 @@ export function PantallaCreditos({
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
+        tipo: TIPO_FIJO_CREDITO,
+        familia: familiaCredito.id,
+        subfamilia: "",
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
@@ -990,68 +967,34 @@ export function PantallaCreditos({
             <div className="mt-2.5 grid gap-2.5 lg:grid-cols-3 2xl:mt-3 2xl:gap-3">
               <Campo label="Tipo">
                 <select
-                  value={formulario.tipo}
-                  onChange={(e) => {
-                    const nextTipo = e.target.value;
-
-                    if (!nextTipo) {
-                      setFormulario((prev) => ({
-                        ...prev,
-                        tipo: "",
-                        familia: "",
-                        subfamilia: "",
-                      }));
-                      return;
-                    }
-
-                    cambiarTipo(nextTipo as TipoClasificacion);
-                  }}
-                  className={inputClassName}
+                  value={TIPO_FIJO_CREDITO}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona tipo</option>
-                    {Object.entries(clasificacionActiva).map(([id, item]) => (
-                      <option key={id} value={id}>
-                        {item.label}
-                      </option>
-                    ))}
+                  <option value={TIPO_FIJO_CREDITO}>{tipoLabelFijo}</option>
                 </select>
               </Campo>
 
               <Campo label="Familia">
                 <select
-                  value={formulario.familia}
-                  onChange={(e) => cambiarFamilia(e.target.value)}
-                  disabled={!formulario.tipo}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value={familiaCredito.id}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona familia</option>
-                  {familiasDisponibles.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
+                  <option value={familiaCredito.id}>{familiaCredito.label}</option>
                 </select>
               </Campo>
 
               <Campo label="Subfamilia">
                 <select
-                  value={formulario.subfamilia}
-                  onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
-                  disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value=""
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">
-                    {!formulario.familia
-                      ? "Selecciona familia antes"
-                      : subfamiliasDisponibles.length === 0
-                        ? "No aplica"
-                        : "Selecciona subfamilia"}
-                  </option>
-                  {subfamiliasDisponibles.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
+                  <option value="">No aplica</option>
                 </select>
               </Campo>
             </div>

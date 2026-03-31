@@ -12,6 +12,8 @@ import {
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 const PROVEEDORES_PREDETERMINADOS: string[] = [];
+const TIPO_FIJO_ALQUILER = "fijos";
+const FAMILIA_FIJA_ALQUILER = "alquiler";
 
 type TipoClasificacion = string;
 
@@ -56,8 +58,8 @@ function crearFormularioInicial(): FormularioFactura {
     proveedor: "",
     fechaFactura: "",
     numeroFactura: "",
-    tipo: "",
-    familia: "",
+    tipo: TIPO_FIJO_ALQUILER,
+    familia: FAMILIA_FIJA_ALQUILER,
     subfamilia: "",
     retencion: "",
     base0: "",
@@ -79,9 +81,9 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     proveedor: registro.proveedor,
     fechaFactura: registro.fechaFactura,
     numeroFactura: registro.numeroFactura,
-    tipo: registro.tipo,
-    familia: registro.familia,
-    subfamilia: registro.subfamilia,
+    tipo: TIPO_FIJO_ALQUILER,
+    familia: FAMILIA_FIJA_ALQUILER,
+    subfamilia: "",
     retencion: registro.retencion,
     base0: registro.base0,
     base4: registro.base4,
@@ -206,6 +208,9 @@ const inputClassName =
 const campoDependienteDeshabilitadoClassName =
   "disabled:pointer-events-none disabled:cursor-not-allowed disabled:appearance-none disabled:!border-[#ccd6d9] disabled:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:!text-[#5e747b] disabled:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] disabled:opacity-100 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:!border-[#ccd6d9] disabled:hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] disabled:hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
 
+const campoDeshabilitadoClassName =
+  "pointer-events-none cursor-not-allowed appearance-none !border-[#ccd6d9] !bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] !text-[#5e747b] !shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] opacity-100 hover:translate-y-0 hover:scale-100 hover:!border-[#ccd6d9] hover:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] hover:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)] focus:!border-[#ccd6d9] focus:!bg-[linear-gradient(180deg,#d9e2e5_0%,#c7d1d5_100%)] focus:!shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]";
+
 const accionClassName =
   "min-w-[54px] rounded-2xl border border-[#cfb099] bg-[linear-gradient(180deg,#fff8f3_0%,#efdfd4_100%)] px-3 py-2 text-center text-sm font-semibold text-[#412821] shadow-[0_10px_18px_rgba(81,54,38,0.09)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#8c4d28] hover:bg-[#fff9f3] hover:shadow-[0_22px_36px_rgba(81,54,38,0.22)] active:translate-y-0 active:scale-100 2xl:min-w-[60px] 2xl:py-2.5";
 
@@ -320,37 +325,9 @@ export function PantallaAlquileres({
     };
   }, [clasificacionActiva]);
 
-  const familiasDisponibles = useMemo(() => {
-    if (!formulario.tipo) {
-      return [];
-    }
-
-    const tipoConfig = clasificacionActiva[formulario.tipo];
-    if (!tipoConfig) {
-      return [];
-    }
-
-    return Object.entries(tipoConfig.familias).map(([id, item]) => ({
-      id,
-      label: item.label,
-    }));
-  }, [clasificacionActiva, formulario.tipo]);
-
-  const subfamiliasDisponibles = useMemo(() => {
-    if (!formulario.tipo || !formulario.familia) {
-      return [];
-    }
-
-    const familias = (clasificacionActiva[formulario.tipo]?.familias ?? {}) as Record<
-      string,
-      {
-        label: string;
-        subfamilias: readonly string[];
-      }
-    >;
-
-    return [...(familias[formulario.familia]?.subfamilias ?? [])];
-  }, [clasificacionActiva, formulario.familia, formulario.tipo]);
+  const tipoLabelFijo = clasificacionActiva[TIPO_FIJO_ALQUILER]?.label ?? "Fijos";
+  const familiaLabelFija =
+    clasificacionActiva[TIPO_FIJO_ALQUILER]?.familias[FAMILIA_FIJA_ALQUILER]?.label ?? "Alquiler";
 
   const base0 = parseDecimal(formulario.base0);
   const base21 = parseDecimal(formulario.base21);
@@ -371,8 +348,6 @@ export function PantallaAlquileres({
     Boolean(formulario.proveedor) &&
     Boolean(formulario.fechaFactura) &&
     Boolean(formulario.numeroFactura.trim()) &&
-    Boolean(formulario.tipo) &&
-    Boolean(formulario.familia) &&
     totalBase !== 0;
 
   useEffect(() => {
@@ -422,23 +397,6 @@ export function PantallaAlquileres({
     valor: FormularioFactura[K]
   ) {
     setFormulario((prev) => ({ ...prev, [campo]: valor }));
-  }
-
-  function cambiarTipo(nextTipo: TipoClasificacion) {
-    setFormulario((prev) => ({
-      ...prev,
-      tipo: nextTipo,
-      familia: "",
-      subfamilia: "",
-    }));
-  }
-
-  function cambiarFamilia(nextFamilia: string) {
-    setFormulario((prev) => ({
-      ...prev,
-      familia: nextFamilia,
-      subfamilia: "",
-    }));
   }
 
   function cambiarImporte(
@@ -529,11 +487,6 @@ export function PantallaAlquileres({
       return;
     }
 
-    if (!formulario.tipo || !formulario.familia) {
-      window.alert("Tipo y Familia son obligatorios.");
-      return;
-    }
-
     if (totalBase === 0) {
       window.alert("La factura debe tener importe distinto de cero.");
       return;
@@ -549,6 +502,9 @@ export function PantallaAlquileres({
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
+        tipo: TIPO_FIJO_ALQUILER,
+        familia: FAMILIA_FIJA_ALQUILER,
+        subfamilia: "",
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
@@ -977,68 +933,34 @@ export function PantallaAlquileres({
             <div className="mt-2.5 grid gap-2.5 lg:grid-cols-3 2xl:mt-3 2xl:gap-3">
               <Campo label="Tipo">
                 <select
-                  value={formulario.tipo}
-                  onChange={(e) => {
-                    const nextTipo = e.target.value;
-
-                    if (!nextTipo) {
-                      setFormulario((prev) => ({
-                        ...prev,
-                        tipo: "",
-                        familia: "",
-                        subfamilia: "",
-                      }));
-                      return;
-                    }
-
-                    cambiarTipo(nextTipo as TipoClasificacion);
-                  }}
-                  className={inputClassName}
+                  value={TIPO_FIJO_ALQUILER}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona tipo</option>
-                    {Object.entries(clasificacionActiva).map(([id, item]) => (
-                      <option key={id} value={id}>
-                        {item.label}
-                      </option>
-                    ))}
+                  <option value={TIPO_FIJO_ALQUILER}>{tipoLabelFijo}</option>
                 </select>
               </Campo>
 
               <Campo label="Familia">
                 <select
-                  value={formulario.familia}
-                  onChange={(e) => cambiarFamilia(e.target.value)}
-                  disabled={!formulario.tipo}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value={FAMILIA_FIJA_ALQUILER}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona familia</option>
-                  {familiasDisponibles.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
+                  <option value={FAMILIA_FIJA_ALQUILER}>{familiaLabelFija}</option>
                 </select>
               </Campo>
 
               <Campo label="Subfamilia">
                 <select
-                  value={formulario.subfamilia}
-                  onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
-                  disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value=""
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">
-                    {!formulario.familia
-                      ? "Selecciona familia antes"
-                      : subfamiliasDisponibles.length === 0
-                        ? "No aplica"
-                        : "Selecciona subfamilia"}
-                  </option>
-                  {subfamiliasDisponibles.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
+                  <option value="">No aplica</option>
                 </select>
               </Campo>
             </div>

@@ -46,14 +46,34 @@ type DestinoNavegacion =
   | { tipo: "registro"; indice: number }
   | { tipo: "nuevo" };
 
+const TIPO_FIJO_CAJA: TipoClasificacion = "ingresos";
+const ETIQUETAS_FAMILIA_CAJA = ["Caja"];
+
+function normalizarTexto(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function resolverFamiliaCaja(clasificacionActiva: ClasificacionMapa) {
+  const familias = clasificacionActiva[TIPO_FIJO_CAJA]?.familias ?? {};
+  const encontrada = Object.entries(familias).find(([, item]) =>
+    ETIQUETAS_FAMILIA_CAJA.some(
+      (etiqueta) => normalizarTexto(item.label) === normalizarTexto(etiqueta)
+    )
+  );
+
+  return encontrada
+    ? { id: encontrada[0], label: encontrada[1].label }
+    : { id: "caja", label: "Caja" };
+}
+
 function crearFormularioInicial(): FormularioFactura {
   return {
     empresa: "",
     proveedor: "",
     fechaFactura: "",
     numeroFactura: "",
-    tipo: "",
-    familia: "",
+    tipo: TIPO_FIJO_CAJA,
+    familia: "caja",
     subfamilia: "",
     base0: "",
     base4: "",
@@ -74,9 +94,9 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     proveedor: registro.proveedor,
     fechaFactura: registro.fechaFactura,
     numeroFactura: registro.numeroFactura,
-    tipo: registro.tipo,
-    familia: registro.familia,
-    subfamilia: registro.subfamilia,
+    tipo: TIPO_FIJO_CAJA,
+    familia: "caja",
+    subfamilia: "",
     base0: registro.base0,
     base4: registro.base4,
     base10: registro.base10,
@@ -220,6 +240,11 @@ export function PantallaCaja({
   const opcionesProveedor = proveedores;
   const opcionesFormaPago = maestros?.formasPago ?? [];
   const opcionesBanco = maestros?.bancos ?? [];
+  const familiaCaja = useMemo(
+    () => resolverFamiliaCaja(clasificacionActiva),
+    [clasificacionActiva]
+  );
+  const tipoLabelFijo = clasificacionActiva[TIPO_FIJO_CAJA]?.label ?? "Ingresos";
   type CampoResaltable =
     | "fechaFactura"
     | "numeroFactura"
@@ -316,68 +341,6 @@ export function PantallaCaja({
     };
   }, [clasificacionActiva]);
 
-  const familiasDisponibles = useMemo(() => {
-    if (!formulario.tipo) {
-      return [];
-    }
-
-    const tipoConfig = clasificacionActiva[formulario.tipo];
-    if (!tipoConfig) {
-      return [];
-    }
-
-    return Object.entries(tipoConfig.familias).map(([id, item]) => ({
-      id,
-      label: item.label,
-    }));
-  }, [clasificacionActiva, formulario.tipo]);
-
-  const subfamiliasDisponibles = useMemo(() => {
-    if (!formulario.tipo || !formulario.familia) {
-      return [];
-    }
-
-    const familias = (clasificacionActiva[formulario.tipo]?.familias ?? {}) as Record<
-      string,
-      {
-        label: string;
-        subfamilias: readonly string[];
-      }
-    >;
-
-    return [...(familias[formulario.familia]?.subfamilias ?? [])];
-  }, [clasificacionActiva, formulario.familia, formulario.tipo]);
-
-  useEffect(() => {
-    if (!formulario.tipo) {
-      return;
-    }
-
-    const tipoConfig = clasificacionActiva[formulario.tipo];
-
-    if (!tipoConfig) {
-      setFormulario((prev) =>
-        prev.tipo || prev.familia || prev.subfamilia
-          ? { ...prev, tipo: "", familia: "", subfamilia: "" }
-          : prev
-      );
-      return;
-    }
-
-    if (formulario.familia && !tipoConfig.familias[formulario.familia]) {
-      setFormulario((prev) => ({ ...prev, familia: "", subfamilia: "" }));
-      return;
-    }
-
-    if (
-      formulario.subfamilia &&
-      formulario.familia &&
-      !tipoConfig.familias[formulario.familia]?.subfamilias.includes(formulario.subfamilia)
-    ) {
-      setFormulario((prev) => ({ ...prev, subfamilia: "" }));
-    }
-  }, [clasificacionActiva, formulario.familia, formulario.subfamilia, formulario.tipo]);
-
   const totalCaja = round2(parseDecimal(formulario.base10));
   const totalBase = round2(totalCaja / 1.1);
   const totalIva = round2(totalCaja - totalBase);
@@ -391,8 +354,6 @@ export function PantallaCaja({
   const formularioValido =
     Boolean(formulario.empresa) &&
     Boolean(formulario.fechaFactura) &&
-    Boolean(formulario.tipo) &&
-    Boolean(formulario.familia) &&
     totalCaja !== 0;
 
   useEffect(() => {
@@ -442,23 +403,6 @@ export function PantallaCaja({
     valor: FormularioFactura[K]
   ) {
     setFormulario((prev) => ({ ...prev, [campo]: valor }));
-  }
-
-  function cambiarTipo(nextTipo: TipoClasificacion) {
-    setFormulario((prev) => ({
-      ...prev,
-      tipo: nextTipo,
-      familia: "",
-      subfamilia: "",
-    }));
-  }
-
-  function cambiarFamilia(nextFamilia: string) {
-    setFormulario((prev) => ({
-      ...prev,
-      familia: nextFamilia,
-      subfamilia: "",
-    }));
   }
 
   function cambiarImporte(campo: "base0" | "base4" | "base10" | "base21", value: string) {
@@ -541,11 +485,6 @@ export function PantallaCaja({
       return;
     }
 
-    if (!formulario.tipo || !formulario.familia) {
-      window.alert("Tipo y Familia son obligatorios.");
-      return;
-    }
-
     if (totalCaja === 0) {
       window.alert("La caja debe tener importe distinto de cero.");
       return;
@@ -561,6 +500,9 @@ export function PantallaCaja({
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
+        tipo: TIPO_FIJO_CAJA,
+        familia: familiaCaja.id,
+        subfamilia: "",
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
@@ -981,68 +923,34 @@ export function PantallaCaja({
             <div className="mt-2.5 grid gap-2.5 lg:grid-cols-3 2xl:mt-3 2xl:gap-3">
               <Campo label="Tipo">
                 <select
-                  value={formulario.tipo}
-                  onChange={(e) => {
-                    const nextTipo = e.target.value;
-
-                    if (!nextTipo) {
-                      setFormulario((prev) => ({
-                        ...prev,
-                        tipo: "",
-                        familia: "",
-                        subfamilia: "",
-                      }));
-                      return;
-                    }
-
-                    cambiarTipo(nextTipo as TipoClasificacion);
-                  }}
-                  className={inputClassName}
+                  value={TIPO_FIJO_CAJA}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona tipo</option>
-                    {Object.entries(clasificacionActiva).map(([id, item]) => (
-                      <option key={id} value={id}>
-                        {item.label}
-                      </option>
-                    ))}
+                  <option value={TIPO_FIJO_CAJA}>{tipoLabelFijo}</option>
                 </select>
               </Campo>
 
               <Campo label="Familia">
                 <select
-                  value={formulario.familia}
-                  onChange={(e) => cambiarFamilia(e.target.value)}
-                  disabled={!formulario.tipo}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value={familiaCaja.id}
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">Selecciona familia</option>
-                  {familiasDisponibles.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
+                  <option value={familiaCaja.id}>{familiaCaja.label}</option>
                 </select>
               </Campo>
 
               <Campo label="Subfamilia">
                 <select
-                  value={formulario.subfamilia}
-                  onChange={(e) => cambiarCampo("subfamilia", e.target.value)}
-                  disabled={!formulario.familia || subfamiliasDisponibles.length === 0}
-                  className={`${inputClassName} ${campoDependienteDeshabilitadoClassName}`}
+                  value=""
+                  disabled
+                  aria-disabled="true"
+                  className={`${inputClassName} ${campoDeshabilitadoClassName}`}
                 >
-                  <option value="">
-                    {!formulario.familia
-                      ? "Selecciona familia antes"
-                      : subfamiliasDisponibles.length === 0
-                        ? "No aplica"
-                        : "Selecciona subfamilia"}
-                  </option>
-                  {subfamiliasDisponibles.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
+                  <option value="">No aplica</option>
                 </select>
               </Campo>
             </div>

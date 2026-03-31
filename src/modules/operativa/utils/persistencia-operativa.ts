@@ -668,7 +668,12 @@ export async function guardarAlquilerPersistido(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
 ) {
-  const actual = normalizarEntrada(registro);
+  const actual = {
+    ...normalizarEntrada(registro),
+    tipo: "fijos",
+    familia: "alquiler",
+    subfamilia: "",
+  };
   const maestros = await cargarMaestrosPersistencia();
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const proveedorId = resolverId(maestros.proveedores, actual.proveedor);
@@ -726,7 +731,16 @@ export async function guardarGastoBancarioPersistido(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
 ) {
-  const actual = normalizarEntrada(registro);
+  const familiaGastoBancario =
+    familyKeyFromLabel(clasificacion, "fijos", "Gastos banco") ||
+    familyKeyFromLabel(clasificacion, "fijos", "Gastos bancarios") ||
+    "gastos-banco";
+  const actual = {
+    ...normalizarEntrada(registro),
+    tipo: "fijos",
+    familia: familiaGastoBancario,
+    subfamilia: "",
+  };
   const maestros = await cargarMaestrosPersistencia();
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const { tipoId, familiaId, subfamiliaId } = resolverClasificacionIds(actual, clasificacion, maestros);
@@ -767,7 +781,16 @@ export async function guardarCreditoPersistido(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
 ) {
-  const actual = normalizarEntrada(registro);
+  const familiaCredito =
+    familyKeyFromLabel(clasificacion, "fijos", "Creditos") ||
+    familyKeyFromLabel(clasificacion, "fijos", "Créditos") ||
+    "creditos";
+  const actual = {
+    ...normalizarEntrada(registro),
+    tipo: "fijos",
+    familia: familiaCredito,
+    subfamilia: "",
+  };
   const maestros = await cargarMaestrosPersistencia();
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const { tipoId, familiaId, subfamiliaId } = resolverClasificacionIds(actual, clasificacion, maestros);
@@ -892,7 +915,15 @@ export async function guardarCajaPersistida(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
 ) {
-  const actual = normalizarEntrada(registro);
+  const familiaCaja =
+    familyKeyFromLabel(clasificacion, "ingresos", "Caja") ||
+    "caja";
+  const actual = {
+    ...normalizarEntrada(registro),
+    tipo: "ingresos",
+    familia: familiaCaja,
+    subfamilia: "",
+  };
   const maestros = await cargarMaestrosPersistencia();
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const { tipoId, familiaId, subfamiliaId } = resolverClasificacionIds(actual, clasificacion, maestros);

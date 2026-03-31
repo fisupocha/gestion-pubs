@@ -155,8 +155,8 @@ function factura(base0: string, base4: string, base10: string, base21: string) {
   return { sinIva, conIva: round2(sinIva + iva), iva };
 }
 
-function alquiler(base4: string, base10: string, base21: string) {
-  return factura("0", base4, base10, base21);
+function alquiler(base0: string, base4: string, base10: string, base21: string) {
+  return factura(base0, base4, base10, base21);
 }
 
 function personal(base0: string, base21: string) {
@@ -226,7 +226,7 @@ function mkMovimiento(
       totales = factura(registro.base0, registro.base4, registro.base10, registro.base21);
       break;
     case "alquileres":
-      totales = alquiler(registro.base4, registro.base10, registro.base21);
+      totales = alquiler(registro.base0, registro.base4, registro.base10, registro.base21);
       break;
     case "personal":
       totales = personal(registro.base0, registro.base21);
