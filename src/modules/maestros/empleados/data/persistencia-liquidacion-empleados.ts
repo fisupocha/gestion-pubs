@@ -54,7 +54,7 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-const FECHA_INICIO_LIQUIDACION = "2026-04-01";
+const FECHA_INICIO_LIQUIDACION = "2026-03-01";
 
 function monthKey(fecha: string) {
   return fecha.slice(0, 7);

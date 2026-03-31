@@ -1,6 +1,10 @@
 "use client";
 
 import type { ClasificacionMapa } from "@/lib/clasificacion";
+import {
+  crearAdjuntoPersistido,
+  extraerMetaAdjunto,
+} from "@/lib/operativa/adjuntos-storage";
 import { supabase } from "@/lib/supabase";
 
 type FormularioOperativa = {
@@ -27,7 +31,7 @@ type FormularioOperativa = {
 
 type RegistroOperativa = FormularioOperativa & {
   id: number;
-  adjunto: null;
+  adjunto: ReturnType<typeof crearAdjuntoPersistido>;
 };
 
 type RegistroOperativaEntrada = Partial<FormularioOperativa> & {
@@ -141,7 +145,19 @@ function normalizarEntrada(registro: RegistroOperativaEntrada): RegistroOperativ
     banco: registro.banco ?? "",
     numeroPagare: registro.numeroPagare ?? "",
     observaciones: registro.observaciones ?? "",
+    adjunto: (registro.adjunto as ReturnType<typeof crearAdjuntoPersistido>) ?? null,
   });
+}
+
+function hidratarAdjunto(row: Record<string, unknown>) {
+  const nombre = String(row.adjunto_nombre ?? "").trim();
+  const url = String(row.adjunto_url ?? "").trim();
+
+  if (!nombre || !url) {
+    return null;
+  }
+
+  return crearAdjuntoPersistido(nombre, url);
 }
 
 function typeKeyFromLabel(clasificacion: ClasificacionMapa, label: string) {
@@ -333,6 +349,7 @@ function hidratarFacturaRecibida(
     fechaPago: String(row.fecha_pago ?? ""),
     numeroPagare: String(row.numero_pagare ?? ""),
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -356,6 +373,7 @@ function hidratarFacturaEmitida(
     fechaPago: String(row.fecha_cobro ?? ""),
     numeroPagare: String(row.numero_pagare ?? ""),
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -380,6 +398,7 @@ function hidratarAlquiler(
     fechaPago: String(row.fecha_pago ?? ""),
     numeroPagare: String(row.numero_pagare ?? ""),
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -398,6 +417,7 @@ function hidratarGastoBancario(
     fechaPago: String(row.fecha_pago ?? ""),
     observaciones: String(row.observaciones ?? ""),
     base21: toFormDecimal(Number(row.total_gasto ?? 0)),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -416,6 +436,7 @@ function hidratarCredito(
     fechaPago: String(row.fecha_pago ?? ""),
     observaciones: String(row.observaciones ?? ""),
     base21: toFormDecimal(Number(row.total_credito ?? 0)),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -435,6 +456,7 @@ function hidratarImpuesto(
     numeroPagare: String(row.numero_pagare ?? ""),
     observaciones: String(row.observaciones ?? ""),
     base21: toFormDecimal(Number(row.total_impuesto ?? 0)),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -453,6 +475,7 @@ function hidratarPersonal(
     base21: toFormDecimal(Number(row.base_21 ?? 0)),
     pagado: true,
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -471,6 +494,7 @@ function hidratarCaja(
     pagado: Boolean(row.cobrado),
     fechaPago: String(row.fecha_cobro ?? ""),
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -488,6 +512,7 @@ function hidratarNotaVaria(
     base21: toFormDecimal(Number(row.total_nota ?? 0)),
     pagado: true,
     observaciones: String(row.observaciones ?? ""),
+    adjunto: hidratarAdjunto(row),
   });
 }
 
@@ -545,6 +570,7 @@ export async function guardarFacturaRecibidaPersistida(
   const totalBase = round2(base0 + base4 + base10 + base21);
   const totalIva = round2(base4 * 0.04 + base10 * 0.1 + base21 * 0.21);
   const totalFactura = round2(totalBase + totalIva);
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId || !proveedorId) {
     throw new Error("No se pudo resolver Local o Proveedor en BBDD");
@@ -574,8 +600,8 @@ export async function guardarFacturaRecibidaPersistida(
       banco_id: bancoId,
       numero_pagare: actual.numeroPagare.trim() || null,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarFacturaRecibida,
     clasificacion
@@ -600,6 +626,7 @@ export async function guardarFacturaEmitidaPersistida(
   const totalBase = round2(base0 + base4 + base10 + base21);
   const totalIva = round2(base4 * 0.04 + base10 * 0.1 + base21 * 0.21);
   const totalFactura = round2(totalBase + totalIva);
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId || !clienteId) {
     throw new Error("No se pudo resolver Local o Cliente en BBDD");
@@ -629,8 +656,8 @@ export async function guardarFacturaEmitidaPersistida(
       banco_id: bancoId,
       numero_pagare: actual.numeroPagare.trim() || null,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarFacturaEmitida,
     clasificacion
@@ -656,6 +683,7 @@ export async function guardarAlquilerPersistido(
   const totalBase = round2(base0 + base21);
   const totalIva = round2(base21 * 0.21);
   const totalFactura = round2(totalBase + totalIva);
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId || !proveedorId) {
     throw new Error("No se pudo resolver Local o Proveedor en BBDD");
@@ -686,8 +714,8 @@ export async function guardarAlquilerPersistido(
       banco_id: bancoId,
       numero_pagare: actual.numeroPagare.trim() || null,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarAlquiler,
     clasificacion
@@ -705,6 +733,7 @@ export async function guardarGastoBancarioPersistido(
   const formaPagoId = actual.formaPago ? resolverId(maestros.formasPago, actual.formaPago) : null;
   const bancoId = actual.banco ? resolverId(maestros.bancos, actual.banco) : null;
   const totalGasto = round2(parseDecimal(actual.base21));
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId) {
     throw new Error("No se pudo resolver Local en BBDD");
@@ -726,8 +755,8 @@ export async function guardarGastoBancarioPersistido(
       forma_pago_id: formaPagoId,
       banco_id: bancoId,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarGastoBancario,
     clasificacion
@@ -745,6 +774,7 @@ export async function guardarCreditoPersistido(
   const formaPagoId = actual.formaPago ? resolverId(maestros.formasPago, actual.formaPago) : null;
   const bancoId = actual.banco ? resolverId(maestros.bancos, actual.banco) : null;
   const totalCredito = round2(parseDecimal(actual.base21));
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId) {
     throw new Error("No se pudo resolver Local en BBDD");
@@ -765,8 +795,8 @@ export async function guardarCreditoPersistido(
       forma_pago_id: formaPagoId,
       banco_id: bancoId,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarCredito,
     clasificacion
@@ -785,6 +815,7 @@ export async function guardarImpuestoPersistido(
   const formaPagoId = actual.formaPago ? resolverId(maestros.formasPago, actual.formaPago) : null;
   const bancoId = actual.banco ? resolverId(maestros.bancos, actual.banco) : null;
   const totalImpuesto = round2(parseDecimal(actual.base21));
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId || !proveedorId) {
     throw new Error("No se pudo resolver Local o Proveedor en BBDD");
@@ -807,8 +838,8 @@ export async function guardarImpuestoPersistido(
       banco_id: bancoId,
       numero_pagare: actual.numeroPagare.trim() || null,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarImpuesto,
     clasificacion
@@ -828,6 +859,7 @@ export async function guardarPersonalPersistido(
   const totalBase = round2(base0 + base21);
   const totalIva = round2(base21 * 0.21);
   const totalPersonal = round2(totalBase + totalIva);
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId) {
     throw new Error("No se pudo resolver Local en BBDD");
@@ -848,8 +880,8 @@ export async function guardarPersonalPersistido(
       total_iva: totalIva,
       total_personal: totalPersonal,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarPersonal,
     clasificacion
@@ -869,6 +901,7 @@ export async function guardarCajaPersistida(
   const totalCaja = round2(parseDecimal(actual.base10));
   const totalBase = round2(totalCaja / 1.1);
   const totalIva = round2(totalCaja - totalBase);
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId) {
     throw new Error("No se pudo resolver Local en BBDD");
@@ -891,8 +924,8 @@ export async function guardarCajaPersistida(
       forma_cobro_id: formaCobroId,
       banco_id: bancoId,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarCaja,
     clasificacion
@@ -1065,6 +1098,7 @@ export async function guardarNotaVariaPersistida(
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const { tipoId, familiaId, subfamiliaId } = resolverClasificacionIds(actual, clasificacion, maestros);
   const totalNota = round2(parseDecimal(actual.base21));
+  const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId) {
     throw new Error("No se pudo resolver Local en BBDD");
@@ -1081,8 +1115,8 @@ export async function guardarNotaVariaPersistida(
       subfamilia_id: subfamiliaId,
       total_nota: totalNota,
       observaciones: actual.observaciones.trim(),
-      adjunto_nombre: null,
-      adjunto_url: null,
+      adjunto_nombre: metaAdjunto.nombre,
+      adjunto_url: metaAdjunto.url,
     },
     hidratarNotaVaria,
     clasificacion

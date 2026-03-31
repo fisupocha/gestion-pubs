@@ -281,6 +281,59 @@ export default function CajaDiariaPage() {
   const snapshotActual = useMemo(() => JSON.stringify(dias), [dias]);
   const hayCambiosSinGuardar = snapshotActual !== snapshotGuardado;
 
+  useEffect(() => {
+    if (!hayCambiosSinGuardar) {
+      return;
+    }
+
+    function avisarSalida(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", avisarSalida);
+
+    return () => {
+      window.removeEventListener("beforeunload", avisarSalida);
+    };
+  }, [hayCambiosSinGuardar]);
+
+  useEffect(() => {
+    if (!hayCambiosSinGuardar) {
+      return;
+    }
+
+    window.history.pushState(
+      { ...(window.history.state ?? {}), __gestionPubsCajaGuard: true },
+      "",
+      window.location.href
+    );
+
+    function avisarHistorial() {
+      const salir = window.confirm(
+        "Hay cambios sin guardar en la caja diaria. Si sales ahora se perderan en pantalla.\n\nQuieres continuar?"
+      );
+
+      if (salir) {
+        window.removeEventListener("popstate", avisarHistorial);
+        window.history.back();
+        return;
+      }
+
+      window.history.pushState(
+        { ...(window.history.state ?? {}), __gestionPubsCajaGuard: true },
+        "",
+        window.location.href
+      );
+    }
+
+    window.addEventListener("popstate", avisarHistorial);
+
+    return () => {
+      window.removeEventListener("popstate", avisarHistorial);
+    };
+  }, [hayCambiosSinGuardar]);
+
   const tituloMes = useMemo(() => {
     return `${(MESES[mesNumero - 1] ?? "").toUpperCase()} ${anoSeleccionado}`;
   }, [anoSeleccionado, mesNumero]);
@@ -381,6 +434,16 @@ export default function CajaDiariaPage() {
             }
           : fila
       )
+    );
+  }
+
+  function confirmarSalidaCaja() {
+    if (!hayCambiosSinGuardar) {
+      return true;
+    }
+
+    return window.confirm(
+      "Hay cambios sin guardar en la caja diaria. Si sales ahora se perderan en pantalla.\n\nQuieres continuar?"
     );
   }
 
@@ -492,6 +555,11 @@ export default function CajaDiariaPage() {
           <div className="flex items-center justify-end gap-2">
             <Link
               href="/gestion-diaria/empleados"
+              onClick={(event) => {
+                if (!confirmarSalidaCaja()) {
+                  event.preventDefault();
+                }
+              }}
               className="rounded-[10px] border border-[#cfafa8] bg-[linear-gradient(180deg,#fffdfc_0%,#eedfda_100%)] px-2.5 py-1 text-[10px] font-semibold text-[#492f29] shadow-[0_6px_12px_rgba(85,52,46,0.08)] transition duration-150 hover:-translate-y-[1px] hover:border-[#c28779]"
             >
               Volver

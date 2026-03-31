@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { CampoFecha } from "@/components/ui/campo-fecha";
+import { prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -539,10 +540,16 @@ export function PantallaAlquileres({
     }
 
     try {
+      const gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
+        modulo: "alquileres",
+        actual: archivoAdjunto,
+        anterior: modoNuevo ? null : (registros[indiceActual]?.adjunto ?? null),
+      });
+
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
-        adjunto: archivoAdjunto,
+        adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
       const persistido = (await guardarAlquilerPersistido(
@@ -552,8 +559,10 @@ export function PantallaAlquileres({
 
       const registroGuardado: RegistroFactura = {
         ...persistido,
-        adjunto: archivoAdjunto,
+        adjunto: gestionAdjunto.adjuntoPersistido,
       };
+
+      await gestionAdjunto.confirmar();
 
       const siguientes = modoNuevo
         ? [...registros, registroGuardado]

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CampoFecha } from "@/components/ui/campo-fecha";
+import { prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -525,13 +526,19 @@ export function PantallaPersonal({
     }
 
     try {
+      const gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
+        modulo: "personal",
+        actual: archivoAdjunto,
+        anterior: modoNuevo ? null : (registros[indiceActual]?.adjunto ?? null),
+      });
+
       const registroActual: RegistroFactura = {
         id: modoNuevo ? 0 : (registros[indiceActual]?.id ?? 0),
         ...formulario,
         proveedor: "",
         numeroFactura: "",
         base21: "",
-        adjunto: archivoAdjunto,
+        adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
       const persistido = (await guardarPersonalPersistido(
@@ -541,8 +548,10 @@ export function PantallaPersonal({
 
       const registroGuardado: RegistroFactura = {
         ...persistido,
-        adjunto: archivoAdjunto,
+        adjunto: gestionAdjunto.adjuntoPersistido,
       };
+
+      await gestionAdjunto.confirmar();
 
       const siguientes = modoNuevo
         ? [...registros, registroGuardado]

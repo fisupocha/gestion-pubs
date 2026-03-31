@@ -149,7 +149,7 @@ const mesesAno = [
   { value: "12", label: "Diciembre" },
 ] as const;
 const RESUMEN_MIN_ANO = 2026;
-const RESUMEN_MIN_MES = "04";
+const RESUMEN_MIN_MES = "03";
 
 function fmtImporte(value: number) {
   return value.toLocaleString("es-ES", {
@@ -587,6 +587,59 @@ export function PantallaCuadranteDemo({
   const snapshotActual = useMemo(() => serializarEmpleados(empleados), [empleados]);
   const hayCambiosSinGuardar = snapshotActual !== snapshotGuardado;
 
+  useEffect(() => {
+    if (modoPantalla !== "cuadrante" || !hayCambiosSinGuardar) {
+      return;
+    }
+
+    function avisarSalida(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", avisarSalida);
+
+    return () => {
+      window.removeEventListener("beforeunload", avisarSalida);
+    };
+  }, [hayCambiosSinGuardar, modoPantalla]);
+
+  useEffect(() => {
+    if (modoPantalla !== "cuadrante" || !hayCambiosSinGuardar) {
+      return;
+    }
+
+    window.history.pushState(
+      { ...(window.history.state ?? {}), __gestionPubsCuadranteGuard: true },
+      "",
+      window.location.href
+    );
+
+    function avisarHistorial() {
+      const salir = window.confirm(
+        "Hay cambios sin guardar en el cuadrante. Si sales ahora se perderan en pantalla.\n\nQuieres continuar?"
+      );
+
+      if (salir) {
+        window.removeEventListener("popstate", avisarHistorial);
+        window.history.back();
+        return;
+      }
+
+      window.history.pushState(
+        { ...(window.history.state ?? {}), __gestionPubsCuadranteGuard: true },
+        "",
+        window.location.href
+      );
+    }
+
+    window.addEventListener("popstate", avisarHistorial);
+
+    return () => {
+      window.removeEventListener("popstate", avisarHistorial);
+    };
+  }, [hayCambiosSinGuardar, modoPantalla]);
+
   function actualizarTramo(
     empleadoNombre: string,
     hora: string,
@@ -693,6 +746,16 @@ export function PantallaCuadranteDemo({
     setFechaSeleccionada(nextFecha);
   }
 
+  function confirmarSalidaCuadrante() {
+    if (modoPantalla !== "cuadrante" || !hayCambiosSinGuardar) {
+      return true;
+    }
+
+    return window.confirm(
+      "Hay cambios sin guardar en el cuadrante. Si sales ahora se perderan en pantalla.\n\nQuieres continuar?"
+    );
+  }
+
   async function guardarCuadrante() {
     if (!fechaSeleccionada) {
       window.alert("Selecciona una fecha antes de guardar.");
@@ -748,7 +811,7 @@ export function PantallaCuadranteDemo({
       Number(resumenAno) < RESUMEN_MIN_ANO ||
       (Number(resumenAno) === RESUMEN_MIN_ANO && resumenMes < RESUMEN_MIN_MES)
     ) {
-      setMensajeResumen("El resumen mensual empieza en abril de 2026.");
+      setMensajeResumen("El resumen mensual empieza en marzo de 2026.");
       return;
     }
 
@@ -790,7 +853,7 @@ export function PantallaCuadranteDemo({
   async function guardarResumenEnPersonal() {
     if (!puedeGuardarEnPersonal) {
       window.alert(
-        "Para guardar en Personal usa el resumen mensual completo desde abril de 2026, sin filtros de local, familia ni empleado."
+        "Para guardar en Personal usa el resumen mensual completo desde marzo de 2026, sin filtros de local, familia ni empleado."
       );
       return;
     }
@@ -846,6 +909,11 @@ export function PantallaCuadranteDemo({
                   ? "/gestion-diaria/empleados"
                   : "/gestion-diaria/empleados/cuadrante-demo"
               }
+              onClick={(event) => {
+                if (!confirmarSalidaCuadrante()) {
+                  event.preventDefault();
+                }
+              }}
               className="rounded-[14px] border border-[#cfafa8] bg-[linear-gradient(180deg,#fffdfc_0%,#eedfda_100%)] px-3 py-2 text-sm font-semibold text-[#492f29] shadow-[0_10px_18px_rgba(85,52,46,0.08)] transition duration-150 hover:-translate-y-[1px] hover:border-[#c28779]"
             >
               {modoPantalla === "cuadrante" ? "Volver a empleados" : "Volver al cuadrante"}

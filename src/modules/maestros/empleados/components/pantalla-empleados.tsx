@@ -55,7 +55,7 @@ const accionClassName =
 const accionDeshabilitadaClassName =
   "min-w-[122px] cursor-not-allowed rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fcf9f8_0%,#efe6e3_100%)] px-4 py-2.5 text-[15px] font-semibold text-[#96817b] opacity-70 shadow-none";
 const LIQUIDACION_MIN_ANO = 2026;
-const LIQUIDACION_MIN_MES = "04";
+const LIQUIDACION_MIN_MES = "03";
 const MESES = [
   { value: "01", label: "Enero" },
   { value: "02", label: "Febrero" },
@@ -158,9 +158,9 @@ export function PantallaEmpleados({
   const [adelantoObservaciones, setAdelantoObservaciones] = useState("");
   const [guardandoAdelanto, setGuardandoAdelanto] = useState(false);
   const [guardandoPagoId, setGuardandoPagoId] = useState<number | null>(null);
-  const [listaFechaDesde, setListaFechaDesde] = useState("2026-04-01");
+  const [listaFechaDesde, setListaFechaDesde] = useState("2026-03-01");
   const [listaFechaHasta, setListaFechaHasta] = useState(
-    new Date().toISOString().slice(0, 10) < "2026-04-01" ? "2026-04-01" : new Date().toISOString().slice(0, 10)
+    new Date().toISOString().slice(0, 10) < "2026-03-01" ? "2026-03-01" : new Date().toISOString().slice(0, 10)
   );
   const [preciosMediosLista, setPreciosMediosLista] = useState<Record<number, number>>({});
   const [cargandoListaPrecios, setCargandoListaPrecios] = useState(false);
@@ -217,7 +217,7 @@ export function PantallaEmpleados({
       Number(liquidacionAno) < LIQUIDACION_MIN_ANO ||
       (Number(liquidacionAno) === LIQUIDACION_MIN_ANO && liquidacionMes < LIQUIDACION_MIN_MES)
     ) {
-      setMensajeLiquidacion("La liquidacion mensual empieza en abril de 2026.");
+      setMensajeLiquidacion("La liquidacion mensual empieza en marzo de 2026.");
       return;
     }
 
@@ -252,8 +252,8 @@ export function PantallaEmpleados({
   }, [modoDerecha, liquidacionAno, liquidacionMes]);
 
   async function cargarPreciosLista() {
-    if (listaFechaDesde < "2026-04-01") {
-      setMensajeLista("La media real empieza en abril de 2026.");
+    if (listaFechaDesde < "2026-03-01") {
+      setMensajeLista("La media real empieza en marzo de 2026.");
       setPreciosMediosLista({});
       return;
     }
@@ -596,7 +596,7 @@ export function PantallaEmpleados({
                     <span className={labelClassName}>Desde</span>
                     <input
                       type="date"
-                      min="2026-04-01"
+                      min="2026-03-01"
                       max={listaFechaHasta}
                       value={listaFechaDesde}
                       onChange={(e) => setListaFechaDesde(e.target.value)}
@@ -607,7 +607,7 @@ export function PantallaEmpleados({
                     <span className={labelClassName}>Hasta</span>
                     <input
                       type="date"
-                      min={listaFechaDesde < "2026-04-01" ? "2026-04-01" : listaFechaDesde}
+                      min={listaFechaDesde < "2026-03-01" ? "2026-03-01" : listaFechaDesde}
                       value={listaFechaHasta}
                       onChange={(e) => setListaFechaHasta(e.target.value)}
                       className={`${inputClassName} px-3 py-2.5`}
@@ -625,7 +625,7 @@ export function PantallaEmpleados({
               <div className="grid grid-cols-[1.45fr_1fr_0.8fr] gap-3 border-b border-[#e3cbc4] px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#8a6458]">
                 <span>Nombre</span>
                 <span>Familia</span>
-                <span>Precio hora</span>
+                <span className="text-center">Precio hora</span>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
