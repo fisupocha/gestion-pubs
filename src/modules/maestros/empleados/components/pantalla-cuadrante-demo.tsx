@@ -339,6 +339,22 @@ function normalizarPeriodoResumen(year?: string, month?: string) {
   return { ano, mes: mes || RESUMEN_MIN_MES };
 }
 
+function desplazarFecha(fecha: string, dias: number) {
+  if (!fecha) {
+    return "";
+  }
+
+  const [year, month, day] = fecha.split("-").map(Number);
+  const valor = new Date(year, (month ?? 1) - 1, day ?? 1);
+  valor.setDate(valor.getDate() + dias);
+
+  return [
+    valor.getFullYear(),
+    String(valor.getMonth() + 1).padStart(2, "0"),
+    String(valor.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export function PantallaCuadranteDemo({
   empleadosBase,
   localesBbdd,
@@ -367,6 +383,7 @@ export function PantallaCuadranteDemo({
   const [celdaEditando, setCeldaEditando] = useState<CeldaEditando | null>(null);
   const [cargandoFecha, setCargandoFecha] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [empleadoActivoId, setEmpleadoActivoId] = useState<number | null>(null);
   const [snapshotGuardado, setSnapshotGuardado] = useState(() =>
     serializarEmpleados(crearEmpleadosVacios(empleadosBase))
   );
@@ -721,6 +738,7 @@ export function PantallaCuadranteDemo({
 
     setEmpleados(crearEmpleadosVacios(empleadosBase));
     setImporteActivo("0");
+    setEmpleadoActivoId(null);
     setCeldaEditando(null);
     setArrastreActivo(null);
     setMensaje(null);
@@ -743,7 +761,16 @@ export function PantallaCuadranteDemo({
 
     setCeldaEditando(null);
     setArrastreActivo(null);
+    setEmpleadoActivoId(null);
     setFechaSeleccionada(nextFecha);
+  }
+
+  function moverFechaSeleccionada(dias: number) {
+    if (!fechaSeleccionada) {
+      return;
+    }
+
+    cambiarFecha(desplazarFecha(fechaSeleccionada, dias));
   }
 
   function confirmarSalidaCuadrante() {
@@ -978,11 +1005,37 @@ export function PantallaCuadranteDemo({
               <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8a6458]">
                 Fecha
               </div>
+              <button
+                type="button"
+                onClick={() => moverFechaSeleccionada(-1)}
+                disabled={!fechaSeleccionada}
+                aria-label="Dia anterior"
+                className={
+                  !fechaSeleccionada
+                    ? "cursor-not-allowed rounded-[10px] border border-[#d8c8c1] bg-[#f2ebe8] px-3 py-1 text-sm font-black text-[#9c867f] opacity-80"
+                    : "rounded-[10px] border border-[#d3b8b0] bg-white/80 px-3 py-1 text-sm font-black text-[#5a433d]"
+                }
+              >
+                {"<"}
+              </button>
               <CampoFecha
                 value={fechaSeleccionada}
                 onChange={(e) => cambiarFecha(e.target.value)}
                 className="w-[148px] rounded-[10px] border border-[#d2aca3] bg-white px-2 py-1 text-center text-sm font-black text-[#4b312b] outline-none"
               />
+              <button
+                type="button"
+                onClick={() => moverFechaSeleccionada(1)}
+                disabled={!fechaSeleccionada}
+                aria-label="Dia siguiente"
+                className={
+                  !fechaSeleccionada
+                    ? "cursor-not-allowed rounded-[10px] border border-[#d8c8c1] bg-[#f2ebe8] px-3 py-1 text-sm font-black text-[#9c867f] opacity-80"
+                    : "rounded-[10px] border border-[#d3b8b0] bg-white/80 px-3 py-1 text-sm font-black text-[#5a433d]"
+                }
+              >
+                {">"}
+              </button>
               <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8a6458]">
                 Precio
               </div>
@@ -1313,9 +1366,26 @@ export function PantallaCuadranteDemo({
               </tr>
             </thead>
             <tbody>
-              {empleados.map((empleado) => (
-                <tr key={empleado.id} className="border-t border-[#ead5ce] bg-white/75">
-                  <td className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-2 py-1.5 align-top">
+              {empleados.map((empleado) => {
+                const filaActiva = empleadoActivoId === empleado.id;
+
+                return (
+                <tr
+                  key={empleado.id}
+                  className={
+                    filaActiva
+                      ? "border-t border-[#d8b477] bg-[#fff5de]"
+                      : "border-t border-[#ead5ce] bg-white/75"
+                  }
+                >
+                  <td
+                    onMouseDown={() => setEmpleadoActivoId(empleado.id)}
+                    className={
+                      filaActiva
+                        ? "sticky left-0 z-10 border-r border-[#d0a861] bg-[linear-gradient(180deg,#fff2c9_0%,#f6e1a9_100%)] px-2 py-1.5 align-top shadow-[inset_4px_0_0_#c88f2f]"
+                        : "sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-2 py-1.5 align-top"
+                    }
+                  >
                     <div className="text-[12px] font-black leading-tight text-[#4b312b]">
                       {empleado.nombre}
                     </div>
@@ -1333,9 +1403,14 @@ export function PantallaCuadranteDemo({
                     return (
                       <td
                         key={`${empleado.id}-${hora}`}
-                        className="border-r border-[#f0dfd9] p-[2px]"
+                        className={
+                          filaActiva
+                            ? "border-r border-[#ecd4ab] bg-[#fff9ee] p-[2px]"
+                            : "border-r border-[#f0dfd9] p-[2px]"
+                        }
                         onMouseDown={(e) => {
                           e.preventDefault();
+                          setEmpleadoActivoId(empleado.id);
 
                           if (modo === "borrar") {
                             setCeldaEditando(null);
@@ -1421,13 +1496,21 @@ export function PantallaCuadranteDemo({
                           />
                         ) : tramo ? (
                           <div
-                            className={`flex h-8 items-center justify-center rounded-[8px] border text-[11px] font-black ${locales[tramo.local].celda}`}
+                            className={`flex h-8 items-center justify-center rounded-[8px] border text-[11px] font-black ${locales[tramo.local].celda} ${
+                              filaActiva ? "ring-1 ring-[#ffe9b3] ring-offset-0" : ""
+                            }`}
                             title={`${tramo.local} - ${hora} - ${fmtImporte(tramo.importe)}`}
                           >
                             {fmtImporte(tramo.importe)}
                           </div>
                         ) : (
-                          <div className="flex h-8 items-center justify-center rounded-[8px] border border-dashed border-[#ead9d3] bg-white/55 text-[8px] font-semibold tracking-[0.02em] text-[#aa938b]">
+                          <div
+                            className={
+                              filaActiva
+                                ? "flex h-8 items-center justify-center rounded-[8px] border border-dashed border-[#d4aa57] bg-[#fff3d5] text-[9px] font-bold tracking-[0.02em] text-[#6a4914]"
+                                : "flex h-8 items-center justify-center rounded-[8px] border border-dashed border-[#ddc5bb] bg-white/70 text-[9px] font-bold tracking-[0.02em] text-[#6f554c]"
+                            }
+                          >
                             {hora}
                           </div>
                         )}
@@ -1435,7 +1518,7 @@ export function PantallaCuadranteDemo({
                     );
                   })}
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

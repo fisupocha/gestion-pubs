@@ -16,8 +16,14 @@ type DiaCaja = {
   tarantinoTaran: string;
   tarantinoSmoking: string;
   cueTaquilla: string;
+  cueTaquillaParte1: string;
+  cueTaquillaParte2: string;
   cueBarraGrande: string;
+  cueBarraGrandeParte1: string;
+  cueBarraGrandeParte2: string;
   cueBarraPequena: string;
+  cueBarraPequenaParte1: string;
+  cueBarraPequenaParte2: string;
   hangar: string;
 };
 
@@ -29,6 +35,23 @@ type CampoEditable =
   | "cueBarraGrande"
   | "cueBarraPequena"
   | "hangar";
+
+type CampoCueConDesglose = "cueTaquilla" | "cueBarraGrande" | "cueBarraPequena";
+
+const DESGLOSE_CUE_POR_CAMPO = {
+  cueTaquilla: {
+    parte1: "cueTaquillaParte1",
+    parte2: "cueTaquillaParte2",
+  },
+  cueBarraGrande: {
+    parte1: "cueBarraGrandeParte1",
+    parte2: "cueBarraGrandeParte2",
+  },
+  cueBarraPequena: {
+    parte1: "cueBarraPequenaParte1",
+    parte2: "cueBarraPequenaParte2",
+  },
+} as const;
 
 type FilaBloque =
   | { id: string; label: string; tipo: "editable"; campo: CampoEditable }
@@ -148,12 +171,6 @@ const bloquesCaja: BloqueCaja[] = [
     titulo: "Hangar",
     filas: [
       { id: "hangar", label: "Hangar", tipo: "editable", campo: "hangar" },
-      {
-        id: "total_hangar",
-        label: "Total Hangar",
-        tipo: "calculada",
-        calcular: (dia) => parseImporte(dia.hangar),
-      },
     ],
     totalMes: (dias) => dias.reduce((sum, dia) => sum + parseImporte(dia.hangar), 0),
   },
@@ -164,6 +181,10 @@ function fmtImporte(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function fmtImporteCompacto(value: number) {
+  return fmtImporte(value).replace(",00", "");
 }
 
 function normalizarImporte(value: string) {
@@ -183,6 +204,32 @@ function parseImporte(value: string) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
+function esCampoCueConDesglose(campo: CampoEditable): campo is CampoCueConDesglose {
+  return campo === "cueTaquilla" || campo === "cueBarraGrande" || campo === "cueBarraPequena";
+}
+
+function normalizarDesgloseCue(value: string) {
+  const partesBrutas = value
+    .replace(/\s+/g, "")
+    .split("+")
+    .slice(0, 2);
+  const usaDesglose = value.includes("+");
+  const parte1 = normalizarImporte(partesBrutas[0] ?? (usaDesglose ? "0" : ""));
+  const parte2 = normalizarImporte(partesBrutas[1] ?? (usaDesglose ? "0" : ""));
+  const total = parseImporte(parte1) + parseImporte(parte2);
+
+  return {
+    parte1,
+    parte2,
+    total:
+      parte1.trim() || parte2.trim()
+        ? Number.isInteger(total)
+          ? String(total)
+          : String(Math.round(total * 100) / 100).replace(".", ",")
+        : "",
+  };
+}
+
 function formatearEditable(value: string) {
   const limpio = value.trim();
 
@@ -197,6 +244,57 @@ function formatearEditable(value: string) {
     minimumFractionDigits: tieneDecimales ? 2 : 0,
     maximumFractionDigits: 2,
   });
+}
+
+function valorDesgloseCue(dia: DiaCaja, campo: CampoCueConDesglose) {
+  const claves = DESGLOSE_CUE_POR_CAMPO[campo];
+  const parte1 = dia[claves.parte1].trim();
+  const parte2 = dia[claves.parte2].trim();
+
+  if (parte1 && parte2) {
+    return `${parte1}+${parte2}`;
+  }
+
+  return parte1 || parte2 || dia[campo];
+}
+
+function valorVisibleCelda(dia: DiaCaja, campo: CampoEditable) {
+  if (esCampoCueConDesglose(campo)) {
+    const claves = DESGLOSE_CUE_POR_CAMPO[campo];
+    const parte1 = dia[claves.parte1].trim();
+    const parte2 = dia[claves.parte2].trim();
+
+    if (parte1 && parte2) {
+      return `${formatearEditable(parte1)} + ${formatearEditable(parte2)}`;
+    }
+
+    if (parte1 || parte2) {
+      return formatearEditable(parte1 || parte2);
+    }
+  }
+
+  return formatearEditable(dia[campo]);
+}
+
+function valorVisibleTotalCue(dia: DiaCaja) {
+  const parte1 =
+    parseImporte(dia.cueTaquillaParte1 || dia.cueTaquilla) +
+    parseImporte(dia.cueBarraGrandeParte1 || dia.cueBarraGrande) +
+    parseImporte(dia.cueBarraPequenaParte1 || dia.cueBarraPequena);
+  const parte2 =
+    parseImporte(dia.cueTaquillaParte2) +
+    parseImporte(dia.cueBarraGrandeParte2) +
+    parseImporte(dia.cueBarraPequenaParte2);
+
+  if (parte1 === 0 && parte2 === 0) {
+    return "";
+  }
+
+  if (parte2 === 0) {
+    return fmtImporteCompacto(parte1);
+  }
+
+  return `${fmtImporteCompacto(parte1)}+${fmtImporteCompacto(parte2)}`;
 }
 
 function pad2(value: number) {
@@ -247,8 +345,14 @@ function crearDia(dia: number, valores?: Partial<Omit<DiaCaja, "dia">>): DiaCaja
     tarantinoTaran: "",
     tarantinoSmoking: "",
     cueTaquilla: "",
+    cueTaquillaParte1: "",
+    cueTaquillaParte2: "",
     cueBarraGrande: "",
+    cueBarraGrandeParte1: "",
+    cueBarraGrandeParte2: "",
     cueBarraPequena: "",
+    cueBarraPequenaParte1: "",
+    cueBarraPequenaParte2: "",
     hangar: "",
     ...valores,
   };
@@ -273,7 +377,9 @@ export default function CajaDiariaPage() {
   const [celdaActiva, setCeldaActiva] = useState<{
     dia: number;
     campo: CampoEditable;
+    valor: string;
   } | null>(null);
+  const [filaActivaCampo, setFilaActivaCampo] = useState<CampoEditable | null>(null);
 
   const mesNumero = Number(mesSeleccionado);
   const anoNumero = Number(anoSeleccionado);
@@ -368,14 +474,22 @@ export default function CajaDiariaPage() {
             tarantinoTaran: guardado.tarantinoTaran,
             tarantinoSmoking: guardado.tarantinoSmoking,
             cueTaquilla: guardado.cueTaquilla,
+            cueTaquillaParte1: guardado.cueTaquillaParte1,
+            cueTaquillaParte2: guardado.cueTaquillaParte2,
             cueBarraGrande: guardado.cueBarraGrande,
+            cueBarraGrandeParte1: guardado.cueBarraGrandeParte1,
+            cueBarraGrandeParte2: guardado.cueBarraGrandeParte2,
             cueBarraPequena: guardado.cueBarraPequena,
+            cueBarraPequenaParte1: guardado.cueBarraPequenaParte1,
+            cueBarraPequenaParte2: guardado.cueBarraPequenaParte2,
             hangar: guardado.hangar,
           };
         });
 
         setDias(siguientes);
         setSnapshotGuardado(JSON.stringify(siguientes));
+        setCeldaActiva(null);
+        setFilaActivaCampo(null);
         setMensajeEstado(
           guardados.length > 0
             ? "Mes cargado desde BBDD."
@@ -391,6 +505,8 @@ export default function CajaDiariaPage() {
         const vacio = crearMesVacio(anoNumero, mesNumero);
         setDias(vacio);
         setSnapshotGuardado(JSON.stringify(vacio));
+        setCeldaActiva(null);
+        setFilaActivaCampo(null);
         setMensajeEstado("No se pudo cargar la caja diaria. Revisa el SQL nuevo en Supabase.");
       } finally {
         if (!cancelado) {
@@ -428,12 +544,33 @@ export default function CajaDiariaPage() {
     setDias((actual) =>
       actual.map((fila) =>
         fila.dia === dia
-          ? {
-              ...fila,
-              [campo]: normalizarImporte(valor),
-            }
+          ? esCampoCueConDesglose(campo)
+            ? (() => {
+                const desglose = normalizarDesgloseCue(valor);
+                const claves = DESGLOSE_CUE_POR_CAMPO[campo];
+
+                return {
+                  ...fila,
+                  [campo]: desglose.total,
+                  [claves.parte1]: desglose.parte1,
+                  [claves.parte2]: desglose.parte2,
+                };
+              })()
+            : {
+                ...fila,
+                [campo]: normalizarImporte(valor),
+              }
           : fila
       )
+    );
+
+    setCeldaActiva((actual) =>
+      actual && actual.dia === dia && actual.campo === campo
+        ? {
+            ...actual,
+            valor,
+          }
+        : actual
     );
   }
 
@@ -457,8 +594,14 @@ export default function CajaDiariaPage() {
         tarantinoTaran: dia.tarantinoTaran,
         tarantinoSmoking: dia.tarantinoSmoking,
         cueTaquilla: dia.cueTaquilla,
+        cueTaquillaParte1: dia.cueTaquillaParte1,
+        cueTaquillaParte2: dia.cueTaquillaParte2,
         cueBarraGrande: dia.cueBarraGrande,
+        cueBarraGrandeParte1: dia.cueBarraGrandeParte1,
+        cueBarraGrandeParte2: dia.cueBarraGrandeParte2,
         cueBarraPequena: dia.cueBarraPequena,
+        cueBarraPequenaParte1: dia.cueBarraPequenaParte1,
+        cueBarraPequenaParte2: dia.cueBarraPequenaParte2,
         hangar: dia.hangar,
       }));
 
@@ -700,7 +843,7 @@ export default function CajaDiariaPage() {
                             </th>
                           );
                         })}
-                        <th className="px-1 py-1.5 text-right">Total</th>
+                        <th className="px-1 py-1.5 text-right text-[10px]">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -712,6 +855,9 @@ export default function CajaDiariaPage() {
 
                           return sum + fila.calcular(dia);
                         }, 0);
+                        const filaActiva =
+                          fila.tipo === "editable" &&
+                          (celdaActiva?.campo === fila.campo || filaActivaCampo === fila.campo);
 
                         return (
                           <tr
@@ -719,10 +865,25 @@ export default function CajaDiariaPage() {
                             className={
                               fila.tipo === "calculada"
                                 ? "border-t border-[#d9b8ae] bg-[linear-gradient(180deg,#fffdfc_0%,#f1e4de_100%)]"
-                                : "border-t border-[#ead5ce] bg-white/75"
+                                : filaActiva
+                                  ? "border-t border-[#d9b064] bg-[linear-gradient(180deg,#fff7e4_0%,#f8ead0_100%)]"
+                                  : "border-t border-[#ead5ce] bg-white/75"
                             }
                           >
-                            <td className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 font-black leading-tight">
+                            <td
+                              onMouseDown={() => {
+                                if (fila.tipo === "editable") {
+                                  setFilaActivaCampo(fila.campo);
+                                }
+                              }}
+                              className={
+                                filaActiva
+                                  ? "sticky left-0 z-10 cursor-pointer border-r border-[#d0a24d] bg-[linear-gradient(180deg,#fdebbf_0%,#f6d78a_100%)] px-1.5 py-1.5 text-[10px] font-black leading-tight text-[#4e3515] shadow-[inset_3px_0_0_#d08f22]"
+                                  : fila.tipo === "editable"
+                                    ? "sticky left-0 z-10 cursor-pointer border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 text-[10px] font-black leading-tight text-[#3f2b26]"
+                                    : "sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 text-[10px] font-black leading-tight text-[#3f2b26]"
+                              }
+                            >
                               {fila.label}
                             </td>
 
@@ -743,32 +904,46 @@ export default function CajaDiariaPage() {
                               const valor =
                                 fila.tipo === "editable"
                                   ? dia[fila.campo]
-                                  : fmtImporte(fila.calcular(dia));
+                                  : fila.id === "total_cue"
+                                    ? valorVisibleTotalCue(dia)
+                                    : fmtImporte(fila.calcular(dia));
 
                               return (
                                 <td
                                   key={`${bloque.id}-${fila.id}-${dia.dia}`}
-                                  className="border-r border-[#f0dfd9] p-[1px]"
+                                  className={
+                                    filaActiva
+                                      ? "border-r border-[#e4c57d] bg-[#fff5dc] p-[1px]"
+                                      : "border-r border-[#f0dfd9] p-[1px]"
+                                  }
                                 >
                                   {fila.tipo === "editable" ? (
                                     <input
                                       value={
                                         celdaActiva?.dia === dia.dia &&
                                         celdaActiva?.campo === fila.campo
-                                          ? valor
-                                          : formatearEditable(valor)
+                                          ? celdaActiva.valor
+                                          : valorVisibleCelda(dia, fila.campo)
                                       }
                                       onChange={(e) =>
                                         cambiarCelda(dia.dia, fila.campo, e.target.value)
                                       }
-                                      onFocus={() =>
+                                      onFocus={() => {
                                         setCeldaActiva({
                                           dia: dia.dia,
                                           campo: fila.campo,
-                                        })
-                                      }
+                                          valor: esCampoCueConDesglose(fila.campo)
+                                            ? valorDesgloseCue(dia, fila.campo)
+                                            : valor,
+                                        });
+                                        setFilaActivaCampo(fila.campo);
+                                      }}
                                       onBlur={() => setCeldaActiva(null)}
-                                      className="w-full rounded-[6px] border border-[#d2aca3] bg-white px-0 py-1 text-center text-[9px] font-semibold outline-none"
+                                      className={
+                                        filaActiva
+                                          ? "w-full rounded-[6px] border border-[#d0a24d] bg-white px-0 py-1 text-center text-[9px] font-bold text-[#4a3010] outline-none shadow-[0_0_0_1px_rgba(208,162,77,0.14)]"
+                                          : "w-full rounded-[6px] border border-[#d2aca3] bg-white px-0 py-1 text-center text-[9px] font-semibold outline-none"
+                                      }
                                       placeholder="0"
                                     />
                                   ) : (
@@ -780,7 +955,7 @@ export default function CajaDiariaPage() {
                               );
                             })}
 
-                            <td className="px-1 py-1.5 text-right text-[8px] font-black">
+                            <td className="px-1 py-1.5 text-right text-[11px] font-black text-[#3f2b26]">
                               {fmtImporte(totalFila)}
                             </td>
                           </tr>
@@ -842,12 +1017,12 @@ export default function CajaDiariaPage() {
                         </th>
                       );
                     })}
-                    <th className="px-1 py-1.5 text-right">Total</th>
+                    <th className="px-1 py-1.5 text-right text-[10px]">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t border-[#d9b8ae] bg-[linear-gradient(180deg,#fffdfc_0%,#f1e4de_100%)]">
-                    <td className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 font-black">
+                    <td className="sticky left-0 z-10 border-r border-[#d8b4aa] bg-[linear-gradient(180deg,#fbf6f4_0%,#f2e6e2_100%)] px-1.5 py-1.5 text-[10px] font-black text-[#3f2b26]">
                       Total dia
                     </td>
                     {Array.from({ length: NUM_DIAS }, (_, index) => {
@@ -864,7 +1039,7 @@ export default function CajaDiariaPage() {
                         </td>
                       );
                     })}
-                    <td className="px-1 py-1.5 text-right text-[8px] font-black">
+                    <td className="px-1 py-1.5 text-right text-[11px] font-black text-[#3f2b26]">
                       {fmtImporte(totalMes)}
                     </td>
                   </tr>

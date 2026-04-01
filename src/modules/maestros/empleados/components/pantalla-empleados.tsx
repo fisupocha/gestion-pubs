@@ -54,6 +54,8 @@ const accionClassName =
 
 const accionDeshabilitadaClassName =
   "min-w-[122px] cursor-not-allowed rounded-2xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fcf9f8_0%,#efe6e3_100%)] px-4 py-2.5 text-[15px] font-semibold text-[#96817b] opacity-70 shadow-none";
+const liquidacionTablaGridClassName =
+  "grid grid-cols-[minmax(190px,1.72fr)_minmax(54px,0.52fr)_minmax(76px,0.68fr)_minmax(88px,0.8fr)_minmax(88px,0.8fr)_minmax(92px,0.86fr)_minmax(98px,0.92fr)_minmax(90px,0.82fr)_minmax(82px,0.76fr)] gap-2";
 const LIQUIDACION_MIN_ANO = 2026;
 const LIQUIDACION_MIN_MES = "03";
 const MESES = [
@@ -666,19 +668,19 @@ export function PantallaEmpleados({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
-              <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1.68fr)_minmax(360px,0.82fr)]">
+            <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3">
+              <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(380px,0.86fr)]">
                 <div className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-                  <div className="grid grid-cols-[1.55fr_0.56fr_0.7fr_0.82fr_0.82fr_0.88fr_0.88fr_0.9fr_0.74fr] gap-3 border-b border-[#e3cbc4] px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-[#8a6458]">
+                  <div className={`${liquidacionTablaGridClassName} items-center border-b border-[#e3cbc4] px-4 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-[#8a6458]`}>
                     <span>Nombre</span>
-                    <span>Horas</span>
-                    <span>Precio medio</span>
-                    <span>Total sueldo</span>
-                    <span>Saldo ant.</span>
-                    <span>Adelantos mes</span>
-                    <span>Total a pagar</span>
-                    <span>Saldo sig.</span>
-                    <span>Pagado</span>
+                    <span className="text-right">Horas</span>
+                    <span className="text-right">Precio medio</span>
+                    <span className="text-right">Total sueldo</span>
+                    <span className="text-right">Saldo ant.</span>
+                    <span className="text-right">Adelantos mes</span>
+                    <span className="text-right">Total a pagar</span>
+                    <span className="text-right">Saldo sig.</span>
+                    <span className="text-center">Pagado</span>
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-y-auto">
@@ -693,7 +695,7 @@ export function PantallaEmpleados({
                         {filasLiquidacion.map((fila) => (
                           <div
                             key={fila.empleadoId}
-                            className="grid grid-cols-[1.55fr_0.56fr_0.7fr_0.82fr_0.82fr_0.88fr_0.88fr_0.9fr_0.74fr] gap-3 px-4 py-3 text-sm text-[#3f2c28]"
+                            className={`${liquidacionTablaGridClassName} items-center px-4 py-3 text-sm text-[#3f2c28]`}
                           >
                             <div className="min-w-0">
                               <div className="truncate font-semibold">{fila.nombreEmpleado}</div>
@@ -712,19 +714,34 @@ export function PantallaEmpleados({
                               value={fila.pagado ? "si" : "no"}
                               onChange={(e) => void actualizarEstadoPagado(fila.empleadoId, e.target.value === "si")}
                               disabled={guardandoPagoId === fila.empleadoId}
-                              className="w-full rounded-xl border border-[#d2aca3] bg-white px-2 py-1.5 text-sm font-semibold text-[#4b312b] outline-none"
+                              className="justify-self-center w-[82px] rounded-xl border border-[#d2aca3] bg-white px-2 py-1.5 text-sm font-semibold text-[#4b312b] outline-none"
                             >
                               <option value="no">No</option>
                               <option value="si">Si</option>
                             </select>
                           </div>
                         ))}
+                        <div className={`${liquidacionTablaGridClassName} items-center bg-[linear-gradient(180deg,#f4e2db_0%,#ebd3ca_100%)] px-4 py-3 text-sm text-[#3f2c28] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]`}>
+                          <div className="min-w-0">
+                            <div className="truncate font-black uppercase tracking-[0.08em] text-[#4b312b]">
+                              Total empleados
+                            </div>
+                          </div>
+                          <span />
+                          <span />
+                          <span />
+                          <span />
+                          <span />
+                          <span className="text-right font-black text-[#4b312b]">{fmtMoney(totalPagarMes)}</span>
+                          <span />
+                          <span />
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="grid min-h-0 gap-3 xl:grid-rows-[auto_minmax(0,1fr)]">
+                <div className="grid min-h-0 gap-3 xl:mx-auto xl:w-full xl:max-w-[500px] xl:grid-rows-[auto_minmax(0,1fr)]">
                   <div className="rounded-[20px] border border-[#d7bbb3] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
                     <div className="grid gap-2.5">
                       <div className="grid gap-2.5 xl:grid-cols-[1fr_108px] xl:items-end">

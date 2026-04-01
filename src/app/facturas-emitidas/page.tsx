@@ -3,6 +3,8 @@ import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obte
 import { listarClientes } from "@/modules/maestros/clientes/data/listar-clientes";
 import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 
+export const dynamic = "force-dynamic";
+
 export default async function FacturasEmitidasPage() {
   const [clientesData, clasificacion, maestros] = await Promise.all([
     listarClientes(),

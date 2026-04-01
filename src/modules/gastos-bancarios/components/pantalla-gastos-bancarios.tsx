@@ -427,6 +427,10 @@ export function PantallaGastosBancarios({
     campo: K,
     valor: FormularioFactura[K]
   ) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({
       ...prev,
       [campo]: valor,
@@ -435,6 +439,10 @@ export function PantallaGastosBancarios({
   }
 
   function cambiarImporte(campo: "base0" | "base4" | "base10" | "base21", value: string) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({
       ...prev,
       [campo]: normalizarImporte(value),
@@ -511,6 +519,10 @@ export function PantallaGastosBancarios({
   async function guardarPrueba(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    if (esGestoria) {
+      return;
+    }
+
     if (!formulario.empresa || !formulario.fechaFactura) {
       window.alert("Completa Local y Fecha gasto.");
       return;
@@ -574,6 +586,10 @@ export function PantallaGastosBancarios({
   }
 
   function seleccionarAdjunto(e: React.ChangeEvent<HTMLInputElement>) {
+    if (esGestoria) {
+      return;
+    }
+
     const nextArchivo = e.target.files?.[0];
 
     if (!nextArchivo) {
@@ -601,6 +617,10 @@ export function PantallaGastosBancarios({
   }
 
   function quitarAdjunto() {
+    if (esGestoria) {
+      return;
+    }
+
     if (!archivoAdjunto) {
       return;
     }
@@ -1144,7 +1164,7 @@ export function PantallaGastosBancarios({
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5 2xl:mt-4 2xl:gap-3">
                 <button
                   type="submit"
-                  disabled={botonGuardado || !formularioValido}
+                  disabled={esGestoria || botonGuardado || !formularioValido}
                   className={
                     botonGuardado
                       ? "min-w-[124px] rounded-2xl border border-[#8fb68a] bg-[linear-gradient(180deg,#dcefd7_0%,#b9d7b2_100%)] px-4 py-2 text-[15px] font-semibold text-[#264823] shadow-[0_12px_20px_rgba(63,107,56,0.14)] 2xl:min-w-[136px] 2xl:py-2.5"

@@ -421,10 +421,18 @@ export function PantallaFacturasEmitidas({
     campo: K,
     valor: FormularioFactura[K]
   ) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({ ...prev, [campo]: valor }));
   }
 
   function cambiarTipo(nextTipo: TipoClasificacion) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({
       ...prev,
       tipo: nextTipo,
@@ -434,6 +442,10 @@ export function PantallaFacturasEmitidas({
   }
 
   function cambiarFamilia(nextFamilia: string) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({
       ...prev,
       familia: nextFamilia,
@@ -442,6 +454,10 @@ export function PantallaFacturasEmitidas({
   }
 
   function cambiarImporte(campo: "base0" | "base4" | "base10" | "base21", value: string) {
+    if (esGestoria) {
+      return;
+    }
+
     setFormulario((prev) => ({
       ...prev,
       [campo]: normalizarImporte(value),
@@ -516,6 +532,10 @@ export function PantallaFacturasEmitidas({
   async function guardarPrueba(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    if (esGestoria) {
+      return;
+    }
+
     if (!formulario.empresa || !formulario.cliente || !formulario.fechaFactura) {
       window.alert("Completa Local, Cliente y Fecha factura.");
       return;
@@ -583,6 +603,10 @@ export function PantallaFacturasEmitidas({
   }
 
   function seleccionarAdjunto(e: React.ChangeEvent<HTMLInputElement>) {
+    if (esGestoria) {
+      return;
+    }
+
     const nextArchivo = e.target.files?.[0];
 
     if (!nextArchivo) {
@@ -610,6 +634,10 @@ export function PantallaFacturasEmitidas({
   }
 
   function quitarAdjunto() {
+    if (esGestoria) {
+      return;
+    }
+
     if (!archivoAdjunto) {
       return;
     }
@@ -983,6 +1011,10 @@ export function PantallaFacturasEmitidas({
                 <select
                   value={formulario.tipo}
                   onChange={(e) => {
+                    if (esGestoria) {
+                      return;
+                    }
+
                     const nextTipo = e.target.value;
 
                     if (!nextTipo) {
@@ -1187,7 +1219,7 @@ export function PantallaFacturasEmitidas({
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5 2xl:mt-4 2xl:gap-3">
                 <button
                   type="submit"
-                  disabled={botonGuardado || !formularioValido}
+                  disabled={esGestoria || botonGuardado || !formularioValido}
                   className={
                     botonGuardado
                       ? "min-w-[124px] rounded-2xl border border-[#69a999] bg-[linear-gradient(180deg,#dcf4ee_0%,#abd8cb_100%)] px-4 py-2 text-[15px] font-semibold text-[#14483b] shadow-[0_12px_20px_rgba(32,104,87,0.18)] 2xl:min-w-[136px] 2xl:py-2.5"

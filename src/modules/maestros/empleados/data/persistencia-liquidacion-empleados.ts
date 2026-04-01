@@ -50,6 +50,11 @@ type RegistroPagoRow = {
   pagado: boolean | null;
 };
 
+type EmpleadoActualRow = {
+  id: number;
+  nombre: string | null;
+};
+
 function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -159,10 +164,27 @@ export async function listarLiquidacionMensualEmpleados({
     ...[...agrupadoPorEmpleadoYMes.values()].map((item) => item.empleadoId),
     ...adelantos.map((item) => item.empleadoId),
   ]);
+  const empleadosIdsArray = [...empleadosIds];
+  const nombresActualesPorEmpleado = new Map<number, string>();
+
+  if (empleadosIdsArray.length > 0) {
+    const { data: empleadosActuales, error: empleadosActualesError } = await supabase
+      .from("empleados")
+      .select("id, nombre")
+      .in("id", empleadosIdsArray);
+
+    if (empleadosActualesError) {
+      throw new Error("No se pudo cargar la liquidacion mensual de empleados");
+    }
+
+    ((empleadosActuales ?? []) as EmpleadoActualRow[]).forEach((item) => {
+      nombresActualesPorEmpleado.set(Number(item.id), String(item.nombre ?? "").trim());
+    });
+  }
 
   const liquidacion: RegistroLiquidacionMensual[] = [];
 
-  [...empleadosIds].forEach((empleadoId) => {
+  empleadosIdsArray.forEach((empleadoId) => {
       let saldoArrastrado = 0;
       let filaSeleccionada: RegistroLiquidacionMensual | null = null;
 
@@ -181,6 +203,8 @@ export async function listarLiquidacionMensualEmpleados({
 
         if (mes === mesSeleccionado) {
           const info = empleadosInfo.get(empleadoId);
+          const nombreEmpleadoActual =
+            nombresActualesPorEmpleado.get(empleadoId) || info?.nombreEmpleado || "";
           const tieneContenido =
             mediasHoras > 0 ||
             totalSueldo > 0 ||
@@ -194,7 +218,7 @@ export async function listarLiquidacionMensualEmpleados({
 
           filaSeleccionada = {
             empleadoId,
-            nombreEmpleado: info?.nombreEmpleado ?? "",
+            nombreEmpleado: nombreEmpleadoActual,
             familia: info?.familia ?? "",
             mediasHoras,
             horas,

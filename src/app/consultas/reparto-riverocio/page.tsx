@@ -3,6 +3,8 @@ import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obte
 import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import { consultaStateFromSearchParams } from "@/modules/consultas/utils/estado-consultas";
 
+export const dynamic = "force-dynamic";
+
 type RepartoRiverocioPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };

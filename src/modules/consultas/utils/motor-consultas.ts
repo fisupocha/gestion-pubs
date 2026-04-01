@@ -193,16 +193,10 @@ function excluirFacturaRecibidaSeguridadRiverocio(
 ) {
   if (origen !== "facturas-recibidas") return false;
 
-  const proveedor = norm(registro.proveedor);
   const tipo = norm(tipoLabel(clasificacion, registro.tipo));
   const familia = norm(familyLabel(clasificacion, registro.tipo, registro.familia));
 
-  return (
-    proveedor === "iim-control acceso sl" &&
-    esLocalEmpresa(registro.empresa) &&
-    tipo === "personal" &&
-    familia === "seguridad"
-  );
+  return esLocalEmpresa(registro.empresa) && tipo === "personal" && familia === "seguridad";
 }
 
 function mkMovimiento(

@@ -3,6 +3,8 @@ import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obte
 import { listarProveedores } from "@/modules/maestros/proveedores/data/listar-proveedores";
 import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 
+export const dynamic = "force-dynamic";
+
 export default async function AlquileresPage() {
   const [proveedoresData, clasificacion, maestros] = await Promise.all([
     listarProveedores(),
