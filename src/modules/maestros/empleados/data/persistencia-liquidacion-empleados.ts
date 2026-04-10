@@ -55,6 +55,8 @@ type EmpleadoActualRow = {
   nombre: string | null;
 };
 
+const PAGE_SIZE = 1000;
+
 function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -81,6 +83,34 @@ function buildMonthRange(fechaDesde: string) {
   return meses;
 }
 
+async function cargarTodasLasPaginas<T>(
+  cargarPagina: (
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+  errorMessage: string
+) {
+  const acumulado: T[] = [];
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await Promise.resolve(cargarPagina(from, to));
+
+    if (error) {
+      throw new Error(errorMessage);
+    }
+
+    const filas = (data ?? []) as T[];
+    acumulado.push(...filas);
+
+    if (filas.length < PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return acumulado;
+}
+
 export async function listarLiquidacionMensualEmpleados({
   fechaDesde,
   fechaHasta,
@@ -88,29 +118,45 @@ export async function listarLiquidacionMensualEmpleados({
   const mesSeleccionado = monthKey(fechaDesde);
   const meses = buildMonthRange(fechaDesde);
   const fechaCierre = fechaHasta;
-  const [cuadranteRes, adelantosRes, pagosRes] = await Promise.all([
-    supabase
-      .from("cuadrante_diario_empleados")
-      .select("fecha, empleado_id, nombre_empleado, familia, precio")
-      .gte("fecha", FECHA_INICIO_LIQUIDACION)
-      .lte("fecha", fechaHasta),
-    supabase
-      .from("gestion_diaria_adelantos_empleados")
-      .select("id, fecha, empleado_id, importe, observaciones")
-      .gte("fecha", FECHA_INICIO_LIQUIDACION)
-      .lte("fecha", fechaHasta)
-      .order("fecha", { ascending: false }),
-    supabase
-      .from("gestion_diaria_liquidacion_empleados")
-      .select("empleado_id, periodo, pagado")
-      .eq("periodo", fechaCierre),
+  const [cuadranteData, adelantosData, pagosData] = await Promise.all([
+    cargarTodasLasPaginas<RegistroCuadranteRow>(
+      (from, to) =>
+        supabase
+          .from("cuadrante_diario_empleados")
+          .select("fecha, empleado_id, nombre_empleado, familia, precio")
+          .gte("fecha", FECHA_INICIO_LIQUIDACION)
+          .lte("fecha", fechaHasta)
+          .order("fecha", { ascending: true })
+          .order("empleado_id", { ascending: true })
+          .order("nombre_empleado", { ascending: true })
+          .range(from, to),
+      "No se pudo cargar la liquidacion mensual de empleados"
+    ),
+    cargarTodasLasPaginas<RegistroAdelantoRow>(
+      (from, to) =>
+        supabase
+          .from("gestion_diaria_adelantos_empleados")
+          .select("id, fecha, empleado_id, importe, observaciones")
+          .gte("fecha", FECHA_INICIO_LIQUIDACION)
+          .lte("fecha", fechaHasta)
+          .order("fecha", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to),
+      "No se pudo cargar la liquidacion mensual de empleados"
+    ),
+    cargarTodasLasPaginas<RegistroPagoRow>(
+      (from, to) =>
+        supabase
+          .from("gestion_diaria_liquidacion_empleados")
+          .select("empleado_id, periodo, pagado")
+          .eq("periodo", fechaCierre)
+          .order("empleado_id", { ascending: true })
+          .range(from, to),
+      "No se pudo cargar la liquidacion mensual de empleados"
+    ),
   ]);
 
-  if (cuadranteRes.error || adelantosRes.error || pagosRes.error) {
-    throw new Error("No se pudo cargar la liquidacion mensual de empleados");
-  }
-
-  const adelantos = ((adelantosRes.data ?? []) as RegistroAdelantoRow[]).map((item) => ({
+  const adelantos = (adelantosData as RegistroAdelantoRow[]).map((item) => ({
     id: item.id,
     fecha: item.fecha,
     empleadoId: item.empleado_id,
@@ -125,7 +171,7 @@ export async function listarLiquidacionMensualEmpleados({
     adelantosPorEmpleadoYMes.set(key, round2((adelantosPorEmpleadoYMes.get(key) ?? 0) + item.importe));
   });
   const pagosPorEmpleado = new Map<number, boolean>();
-  ((pagosRes.data ?? []) as RegistroPagoRow[]).forEach((item) => {
+  (pagosData as RegistroPagoRow[]).forEach((item) => {
     pagosPorEmpleado.set(Number(item.empleado_id), Boolean(item.pagado));
   });
 
@@ -137,7 +183,7 @@ export async function listarLiquidacionMensualEmpleados({
     >
   >();
   const empleadosInfo = new Map<number, { nombreEmpleado: string; familia: string }>();
-  ((cuadranteRes.data ?? []) as RegistroCuadranteRow[]).forEach((item) => {
+  (cuadranteData as RegistroCuadranteRow[]).forEach((item) => {
     const empleadoId = Number(item.empleado_id);
     const key = `${monthKey(item.fecha)}::${empleadoId}`;
     const actual = agrupadoPorEmpleadoYMes.get(key) ?? {

@@ -44,6 +44,8 @@ type RegistroCajaRow = {
   total_caja: number | string;
 };
 
+const PAGE_SIZE = 1000;
+
 function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -52,19 +54,48 @@ function claveRegistro(registro: Pick<RegistroCuadranteDiario, "empleadoId" | "h
   return `${registro.empleadoId}__${registro.hora}`;
 }
 
-export async function listarCuadranteDiarioPersistido(fecha: string) {
-  const { data, error } = await supabase
-    .from("cuadrante_diario_empleados")
-    .select(
-      "id, fecha, hora, empleado_id, nombre_empleado, familia, empresa_id, local, precio"
-    )
-    .eq("fecha", fecha)
-    .order("hora", { ascending: true })
-    .order("nombre_empleado", { ascending: true });
+async function cargarTodasLasPaginas<T>(
+  cargarPagina: (
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+  errorMessage: string
+) {
+  const acumulado: T[] = [];
 
-  if (error) {
-    throw new Error("No se pudo cargar el cuadrante diario");
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await Promise.resolve(cargarPagina(from, to));
+
+    if (error) {
+      throw new Error(errorMessage);
+    }
+
+    const filas = (data ?? []) as T[];
+    acumulado.push(...filas);
+
+    if (filas.length < PAGE_SIZE) {
+      break;
+    }
   }
+
+  return acumulado;
+}
+
+export async function listarCuadranteDiarioPersistido(fecha: string) {
+  const data = await cargarTodasLasPaginas<RegistroCuadranteRow>(
+    (from, to) =>
+      supabase
+        .from("cuadrante_diario_empleados")
+        .select(
+          "id, fecha, hora, empleado_id, nombre_empleado, familia, empresa_id, local, precio"
+        )
+        .eq("fecha", fecha)
+        .order("hora", { ascending: true })
+        .order("nombre_empleado", { ascending: true })
+        .range(from, to),
+    "No se pudo cargar el cuadrante diario"
+  );
 
   return ((data ?? []) as RegistroCuadranteRow[]).map((item) => ({
     id: item.id,
@@ -86,34 +117,32 @@ export async function listarResumenCuadrantePersistido({
   familia,
   empleadoId,
 }: FiltrosResumenCuadrante) {
-  let query = supabase
-    .from("cuadrante_diario_empleados")
-    .select(
-      "id, fecha, hora, empleado_id, nombre_empleado, familia, empresa_id, local, precio"
-    )
-    .gte("fecha", fechaDesde)
-    .lte("fecha", fechaHasta)
-    .order("fecha", { ascending: true })
-    .order("hora", { ascending: true })
-    .order("nombre_empleado", { ascending: true });
+  const data = await cargarTodasLasPaginas<RegistroCuadranteRow>((from, to) => {
+    let query = supabase
+      .from("cuadrante_diario_empleados")
+      .select(
+        "id, fecha, hora, empleado_id, nombre_empleado, familia, empresa_id, local, precio"
+      )
+      .gte("fecha", fechaDesde)
+      .lte("fecha", fechaHasta)
+      .order("fecha", { ascending: true })
+      .order("hora", { ascending: true })
+      .order("nombre_empleado", { ascending: true });
 
-  if (local) {
-    query = query.eq("local", local);
-  }
+    if (local) {
+      query = query.eq("local", local);
+    }
 
-  if (familia) {
-    query = query.eq("familia", familia);
-  }
+    if (familia) {
+      query = query.eq("familia", familia);
+    }
 
-  if (typeof empleadoId === "number") {
-    query = query.eq("empleado_id", empleadoId);
-  }
+    if (typeof empleadoId === "number") {
+      query = query.eq("empleado_id", empleadoId);
+    }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error("No se pudo cargar el resumen del cuadrante");
-  }
+    return query.range(from, to);
+  }, "No se pudo cargar el resumen del cuadrante");
 
   return ((data ?? []) as RegistroCuadranteRow[]).map((item) => ({
     id: item.id,
@@ -176,14 +205,16 @@ export async function guardarCuadranteDiarioPersistido(
   fecha: string,
   registros: RegistroCuadranteDiario[]
 ) {
-  const { data: existentes, error: errorExistentes } = await supabase
-    .from("cuadrante_diario_empleados")
-    .select("id, empleado_id, hora")
-    .eq("fecha", fecha);
-
-  if (errorExistentes) {
-    throw new Error("No se pudo preparar el guardado del cuadrante diario");
-  }
+  const existentes = await cargarTodasLasPaginas<{ id: number; empleado_id: number; hora: string }>(
+    (from, to) =>
+      supabase
+        .from("cuadrante_diario_empleados")
+        .select("id, empleado_id, hora")
+        .eq("fecha", fecha)
+        .order("id", { ascending: true })
+        .range(from, to),
+    "No se pudo preparar el guardado del cuadrante diario"
+  );
 
   const registrosNormalizados = registros.map((registro) => ({
     fecha,
@@ -209,7 +240,7 @@ export async function guardarCuadranteDiarioPersistido(
   }
 
   const clavesActuales = new Set(registros.map((registro) => claveRegistro(registro)));
-  const idsBorrar = ((existentes ?? []) as Array<{ id: number; empleado_id: number; hora: string }>)
+  const idsBorrar = (existentes as Array<{ id: number; empleado_id: number; hora: string }>)
     .filter(
       (item) => !clavesActuales.has(claveRegistro({ empleadoId: item.empleado_id, hora: item.hora }))
     )
