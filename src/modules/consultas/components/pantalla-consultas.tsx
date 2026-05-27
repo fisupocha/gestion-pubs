@@ -66,15 +66,6 @@ function ordenarAlfabetico(values: string[]) {
   return [...values].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
 }
 
-function agruparEnColumnas<T>(items: T[], columnas: number) {
-  const grupos = Array.from({ length: columnas }, () => [] as T[]);
-  const filasPorColumna = Math.max(1, Math.ceil(items.length / columnas));
-  items.forEach((item, index) => {
-    grupos[Math.min(columnas - 1, Math.floor(index / filasPorColumna))]?.push(item);
-  });
-  return grupos.filter((grupo) => grupo.length > 0);
-}
-
 function TipoFamiliasBlock({
   tipo,
   familias,
@@ -161,32 +152,35 @@ function TipoFamiliasBlock({
   );
 }
 
-function construirColumnasTipos(
+function construirDistribucionTipos(
   bloques: Array<{
     tipo: string;
     familias: string[];
   }>
 ) {
   const byTipo = new Map(bloques.map((bloque) => [bloque.tipo, bloque]));
-  const order = [
-    ["Fijos"],
-    ["Mercaderias", "Personal"],
-    ["Extras", "Ingresos", "Varios"],
-  ];
+  const columna1Top = byTipo.get("Fijos") ?? null;
+  const columna2 = ["Mercaderias", "Personal"]
+    .map((tipo) => byTipo.get(tipo))
+    .filter(Boolean) as typeof bloques;
+  const columna3 = ["Extras", "Ingresos", "Varios"]
+    .map((tipo) => byTipo.get(tipo))
+    .filter(Boolean) as typeof bloques;
 
-  const columnas = order
-    .map((tipos) => tipos.map((tipo) => byTipo.get(tipo)).filter(Boolean) as typeof bloques)
-    .filter((columna) => columna.length > 0);
+  const usados = new Set([
+    ...(columna1Top ? [columna1Top.tipo] : []),
+    ...columna2.map((bloque) => bloque.tipo),
+    ...columna3.map((bloque) => bloque.tipo),
+  ]);
 
-  const usados = new Set(columnas.flatMap((columna) => columna.map((bloque) => bloque.tipo)));
-  const restantes = bloques.filter((bloque) => !usados.has(bloque.tipo));
+  const columna1Resto = bloques.filter((bloque) => !usados.has(bloque.tipo));
 
-  if (restantes.length > 0) {
-    const extras = agruparEnColumnas(restantes, Math.max(1, 3 - columnas.length));
-    return [...columnas, ...extras];
-  }
-
-  return columnas;
+  return {
+    columna1Top,
+    columna1Resto,
+    columna2,
+    columna3,
+  };
 }
 
 function MiniResumen({
@@ -275,7 +269,10 @@ export function PantallaConsultas({
       })),
     [clasificacion, tiposDisponibles]
   );
-  const columnasTipos = useMemo(() => construirColumnasTipos(tiposConFamilias), [tiposConFamilias]);
+  const distribucionTipos = useMemo(
+    () => construirDistribucionTipos(tiposConFamilias),
+    [tiposConFamilias]
+  );
 
   const resultado = useMemo(
     () =>
@@ -301,7 +298,7 @@ export function PantallaConsultas({
   return (
     <section className="flex h-full min-h-0 flex-col gap-2 p-2">
       <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[1.2fr_0.9fr]">
-        <section className="flex h-full min-h-0 flex-col justify-between gap-2">
+        <section className="flex h-full min-h-0 flex-col gap-2">
           <section className={`${panel} flex flex-col gap-2 p-2`}>
             <div className="grid gap-2 xl:grid-cols-[1.15fr_0.82fr_0.82fr_0.78fr]">
               <section className="rounded-[22px] border border-[#d8c0b9] bg-[rgba(255,250,248,0.68)] p-2">
@@ -387,8 +384,180 @@ export function PantallaConsultas({
           </section>
 
           <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-3">
-            {columnasTipos.map((columna, columnIndex) => (
-              <div key={`col-${columnIndex}`} className="grid min-h-0 gap-2" style={{ gridTemplateRows: `repeat(${columna.length}, minmax(0, 1fr))` }}>
+            <div
+              className="grid min-h-0 gap-2"
+              style={{
+                gridTemplateRows:
+                  distribucionTipos.columna1Top && distribucionTipos.columna1Resto.length > 0
+                    ? "minmax(0, 1fr) minmax(0, 1fr)"
+                    : "minmax(0, 1fr)",
+              }}
+            >
+              {distribucionTipos.columna1Top ? (
+                <TipoFamiliasBlock
+                  key={distribucionTipos.columna1Top.tipo}
+                  tipo={distribucionTipos.columna1Top.tipo}
+                  familias={distribucionTipos.columna1Top.familias}
+                  tipoActivo={state.tiposSeleccionados.includes(distribucionTipos.columna1Top.tipo)}
+                  familiasSeleccionadas={state.familiasSeleccionadas.filter((item) =>
+                    distribucionTipos.columna1Top?.familias.includes(item)
+                  )}
+                  onToggleTipo={() =>
+                    setState((prev) => {
+                      const tiposSeleccionados = toggleValue(
+                        prev.tiposSeleccionados,
+                        distribucionTipos.columna1Top!.tipo
+                      );
+                      const familiasDisponiblesNext = obtenerFamiliasDisponibles(
+                        clasificacion,
+                        tiposSeleccionados
+                      );
+                      const familiasSeleccionadas = filtrarSeleccion(
+                        prev.familiasSeleccionadas,
+                        familiasDisponiblesNext
+                      );
+
+                      return {
+                        ...prev,
+                        tiposSeleccionados,
+                        familiasSeleccionadas,
+                        subfamiliasSeleccionadas: [],
+                      };
+                    })
+                  }
+                  onToggleFamilia={(familia) =>
+                    setState((prev) => ({
+                      ...prev,
+                      familiasSeleccionadas: toggleValue(prev.familiasSeleccionadas, familia),
+                      subfamiliasSeleccionadas: [],
+                    }))
+                  }
+                  onSeleccionRapida={() =>
+                    setState((prev) => {
+                      const bloque = distribucionTipos.columna1Top!;
+                      const todasSeleccionadas = bloque.familias.every((familia) =>
+                        prev.familiasSeleccionadas.includes(familia)
+                      );
+
+                      if (todasSeleccionadas) {
+                        return {
+                          ...prev,
+                          tiposSeleccionados: prev.tiposSeleccionados.filter(
+                            (item) => item !== bloque.tipo
+                          ),
+                          familiasSeleccionadas: prev.familiasSeleccionadas.filter(
+                            (item) => !bloque.familias.includes(item)
+                          ),
+                          subfamiliasSeleccionadas: [],
+                        };
+                      }
+
+                      return {
+                        ...prev,
+                        tiposSeleccionados: prev.tiposSeleccionados.includes(bloque.tipo)
+                          ? prev.tiposSeleccionados
+                          : [...prev.tiposSeleccionados, bloque.tipo],
+                        familiasSeleccionadas: [
+                          ...new Set([...prev.familiasSeleccionadas, ...bloque.familias]),
+                        ],
+                        subfamiliasSeleccionadas: [],
+                      };
+                    })
+                  }
+                />
+              ) : null}
+
+              {distribucionTipos.columna1Resto.length > 0 ? (
+                <div
+                  className="grid min-h-0 gap-2"
+                  style={{
+                    gridTemplateRows: `repeat(${distribucionTipos.columna1Resto.length}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {distribucionTipos.columna1Resto.map((bloque) => (
+                    <TipoFamiliasBlock
+                      key={bloque.tipo}
+                      tipo={bloque.tipo}
+                      familias={bloque.familias}
+                      tipoActivo={state.tiposSeleccionados.includes(bloque.tipo)}
+                      familiasSeleccionadas={state.familiasSeleccionadas.filter((item) =>
+                        bloque.familias.includes(item)
+                      )}
+                      onToggleTipo={() =>
+                        setState((prev) => {
+                          const tiposSeleccionados = toggleValue(prev.tiposSeleccionados, bloque.tipo);
+                          const familiasDisponiblesNext = obtenerFamiliasDisponibles(
+                            clasificacion,
+                            tiposSeleccionados
+                          );
+                          const familiasSeleccionadas = filtrarSeleccion(
+                            prev.familiasSeleccionadas,
+                            familiasDisponiblesNext
+                          );
+
+                          return {
+                            ...prev,
+                            tiposSeleccionados,
+                            familiasSeleccionadas,
+                            subfamiliasSeleccionadas: [],
+                          };
+                        })
+                      }
+                      onToggleFamilia={(familia) =>
+                        setState((prev) => ({
+                          ...prev,
+                          familiasSeleccionadas: toggleValue(prev.familiasSeleccionadas, familia),
+                          subfamiliasSeleccionadas: [],
+                        }))
+                      }
+                      onSeleccionRapida={() =>
+                        setState((prev) => {
+                          const todasSeleccionadas = bloque.familias.every((familia) =>
+                            prev.familiasSeleccionadas.includes(familia)
+                          );
+
+                          if (todasSeleccionadas) {
+                            return {
+                              ...prev,
+                              tiposSeleccionados: prev.tiposSeleccionados.filter(
+                                (item) => item !== bloque.tipo
+                              ),
+                              familiasSeleccionadas: prev.familiasSeleccionadas.filter(
+                                (item) => !bloque.familias.includes(item)
+                              ),
+                              subfamiliasSeleccionadas: [],
+                            };
+                          }
+
+                          return {
+                            ...prev,
+                            tiposSeleccionados: prev.tiposSeleccionados.includes(bloque.tipo)
+                              ? prev.tiposSeleccionados
+                              : [...prev.tiposSeleccionados, bloque.tipo],
+                            familiasSeleccionadas: [
+                              ...new Set([...prev.familiasSeleccionadas, ...bloque.familias]),
+                            ],
+                            subfamiliasSeleccionadas: [],
+                          };
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {[distribucionTipos.columna2, distribucionTipos.columna3].map((columna, columnIndex) => (
+              <div
+                key={`col-fija-${columnIndex}`}
+                className="grid min-h-0 gap-2"
+                style={{
+                  gridTemplateRows:
+                    columna.length > 0
+                      ? `repeat(${columna.length}, minmax(0, 1fr))`
+                      : "minmax(0, 1fr)",
+                }}
+              >
                 {columna.map((bloque) => (
                   <TipoFamiliasBlock
                     key={bloque.tipo}
@@ -500,6 +669,8 @@ export function PantallaConsultas({
               </Link>
               <Link
                 href={detalleHref}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-1.5 text-center text-sm font-black text-[#5a3025] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#7f4718] hover:shadow-[0_20px_32px_rgba(85,52,46,0.18)]"
               >
                 Abrir detalle

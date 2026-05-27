@@ -9,6 +9,9 @@ export type RegistroBase = {
   id: number;
   empresa: string;
   proveedor?: string;
+  cliente?: string;
+  numeroFactura?: string;
+  pagado?: boolean;
   fechaFactura: string;
   tipo: string;
   familia: string;
@@ -17,6 +20,22 @@ export type RegistroBase = {
   base4: string;
   base10: string;
   base21: string;
+};
+
+export type FacturaDetalleLinea = {
+  movimientoId: string;
+  numeroFactura: string;
+  contraparte: string;
+  fecha: string;
+  base: number;
+  iva: number;
+  total: number;
+  pagado: boolean;
+  local: string;
+  importe: number;
+  porcentaje: number;
+  esEmitidaCaja?: boolean;
+  esCompensatoria?: boolean;
 };
 
 export type OperativaConsultaData = {
@@ -57,6 +76,10 @@ export type Movimiento = {
   iva: number;
   esEmpresa: boolean;
   esEmitidaCaja: boolean;
+  numeroFactura: string;
+  proveedor: string;
+  cliente: string;
+  pagado: boolean;
 };
 
 export type ResumenLocal = {
@@ -78,13 +101,10 @@ export type ResumenClasificacion = {
   emitidas: number;
   gastoNeto: number;
   iva: number;
-  emitidasDetalle: {
-    movimientoId: string;
-    fecha: string;
-    local: string;
-    importe: number;
-    porcentaje: number;
-  }[];
+  recibidasDetalle: FacturaDetalleLinea[];
+  emitidasDetalle: FacturaDetalleLinea[];
+  alquileresDetalle: FacturaDetalleLinea[];
+  notasVariasDetalle: FacturaDetalleLinea[];
 };
 
 export const TIPO_INGRESOS = "Ingresos";
@@ -253,6 +273,10 @@ function mkMovimiento(
     iva: totales.iva,
     esEmpresa: esLocalEmpresa(registro.empresa),
     esEmitidaCaja,
+    numeroFactura: registro.numeroFactura ?? "",
+    proveedor: registro.proveedor ?? "",
+    cliente: registro.cliente ?? "",
+    pagado: Boolean(registro.pagado),
   } satisfies Movimiento;
 }
 
@@ -590,6 +614,42 @@ export function calcularConsulta({
   const porcentaje = cajaUsada > 0 ? round2((gastoNeto / cajaUsada) * 100) : 0;
   const beneficio = round2(cajaUsada + emitidasSinCoincidenciaTotal - gastoNeto);
 
+  function mkFacturaDetalleLinea(
+    item: Movimiento,
+    options?: { esCompensatoria?: boolean }
+  ): FacturaDetalleLinea {
+    const totalFull = importe(item);
+    const totalVis =
+      item.esEmpresa && aplicarReparto
+        ? round2(
+            [...setLocalesSeleccionadosOperativos].reduce(
+              (acc, local) =>
+                acc + (construirRepartoEmpresa(item, totalFull).get(local) ?? 0),
+              0
+            )
+          )
+        : totalFull;
+    const factor = totalFull > 0 ? totalVis / totalFull : 1;
+    const contraparte =
+      item.origen === "facturas-emitidas" ? item.cliente || "-" : item.proveedor || "-";
+
+    return {
+      movimientoId: item.id,
+      numeroFactura: item.numeroFactura || "-",
+      contraparte,
+      fecha: item.fecha,
+      base: round2(item.sinIva * factor),
+      iva: round2(item.iva * factor),
+      total: totalVis,
+      pagado: item.pagado,
+      local: item.local,
+      importe: totalVis,
+      porcentaje: cajaUsada > 0 ? round2((totalVis / cajaUsada) * 100) : 0,
+      esEmitidaCaja: item.esEmitidaCaja,
+      esCompensatoria: options?.esCompensatoria,
+    };
+  }
+
   const detalleMap = new Map<string, ResumenClasificacion>();
   gastosSel.forEach((item) => {
     const key = `${item.tipoLabel}|||${item.familiaLabel}|||${item.subfamilia}`;
@@ -602,7 +662,10 @@ export function calcularConsulta({
       emitidas: 0,
       gastoNeto: 0,
       iva: 0,
+      recibidasDetalle: [],
       emitidasDetalle: [],
+      alquileresDetalle: [],
+      notasVariasDetalle: [],
     };
     const importeVisible = item.esEmpresa && aplicarReparto
       ? round2(
@@ -622,6 +685,18 @@ export function calcularConsulta({
       : item.iva;
     row.gastoBruto = round2(row.gastoBruto + importeVisible);
     row.iva = round2(row.iva + ivaVisible);
+    if (item.origen === "facturas-recibidas") {
+      row.recibidasDetalle = [...row.recibidasDetalle, mkFacturaDetalleLinea(item)];
+    }
+    if (item.origen === "alquileres") {
+      row.alquileresDetalle = [...row.alquileresDetalle, mkFacturaDetalleLinea(item)];
+    }
+    if (item.origen === "notas-varias") {
+      row.notasVariasDetalle = [
+        ...row.notasVariasDetalle,
+        { ...mkFacturaDetalleLinea(item), contraparte: "Desconocido" },
+      ];
+    }
     detalleMap.set(key, row);
   });
   emitidasSel.forEach((item) => {
@@ -635,7 +710,10 @@ export function calcularConsulta({
       emitidas: 0,
       gastoNeto: 0,
       iva: 0,
+      recibidasDetalle: [],
       emitidasDetalle: [],
+      alquileresDetalle: [],
+      notasVariasDetalle: [],
     };
     const emitidasVisibles = item.esEmpresa && aplicarReparto
       ? round2(
@@ -648,13 +726,7 @@ export function calcularConsulta({
     row.emitidas = round2(row.emitidas + emitidasVisibles);
     row.emitidasDetalle = [
       ...row.emitidasDetalle,
-      {
-        movimientoId: item.id,
-        fecha: item.fecha,
-        local: item.local,
-        importe: emitidasVisibles,
-        porcentaje: cajaUsada > 0 ? round2((emitidasVisibles / cajaUsada) * 100) : 0,
-      },
+      mkFacturaDetalleLinea(item, { esCompensatoria: true }),
     ];
     detalleMap.set(key, row);
   });
@@ -671,7 +743,10 @@ export function calcularConsulta({
         emitidas: 0,
         gastoNeto: 0,
         iva: 0,
+        recibidasDetalle: [],
         emitidasDetalle: [],
+        alquileresDetalle: [],
+        notasVariasDetalle: [],
       };
       const importeVisible =
         item.esEmpresa && aplicarReparto

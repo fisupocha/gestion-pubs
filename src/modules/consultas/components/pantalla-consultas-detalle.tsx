@@ -1,18 +1,20 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
   calcularConsulta,
   FAMILIA_CAJA,
+  type FacturaDetalleLinea,
   obtenerFamiliasPorTipoConsulta,
   obtenerFamiliaIngresosEmitidasVisible,
   obtenerTiposDisponibles,
   OPERATIVA_CONSULTA_VACIA,
   TIPO_INGRESOS,
 } from "@/modules/consultas/utils/motor-consultas";
+import { DetalleFacturasExpandido } from "@/modules/consultas/components/detalle-facturas-expandido";
 import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
@@ -35,14 +37,26 @@ type FamiliaDetalle = {
   porcentajeBruto: number;
   porcentajeEmitidas: number;
   porcentajeNeto: number;
-  emitidasDetalle: {
-    movimientoId: string;
-    fecha: string;
-    local: string;
-    importe: number;
-    porcentaje: number;
-  }[];
+  recibidasDetalle: FacturaDetalleLinea[];
+  emitidasDetalle: FacturaDetalleLinea[];
+  alquileresDetalle: FacturaDetalleLinea[];
+  notasVariasDetalle: FacturaDetalleLinea[];
 };
+
+function claveLineaFamilia(tipo: string, familia: string) {
+  return `${tipo}|||${familia}`;
+}
+
+function familiaTieneDetalleExpandible(familia: FamiliaDetalle) {
+  return (
+    familia.recibidasDetalle.length > 0 ||
+    familia.emitidasDetalle.length > 0 ||
+    familia.alquileresDetalle.length > 0 ||
+    familia.notasVariasDetalle.length > 0 ||
+    familia.bruto > 0 ||
+    familia.emitidas > 0
+  );
+}
 
 type TipoDetalle = {
   tipo: string;
@@ -97,8 +111,10 @@ export function PantallaConsultasDetalle({
   maestros,
   initialState,
 }: PantallaConsultasDetalleProps) {
+  const router = useRouter();
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
   const [repartosRiverocio, setRepartosRiverocio] = useState<RepartoRiverocioManual[]>([]);
+  const [expandidas, setExpandidas] = useState<Set<string>>(() => new Set());
   const reportRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -138,10 +154,17 @@ export function PantallaConsultasDetalle({
     [clasificacion, maestros, operativa, initialState, repartosRiverocio]
   );
 
-  const volverHref = useMemo(() => {
+  const consultasHref = useMemo(() => {
     const query = consultaStateToQueryString(initialState);
     return query ? `/consultas?${query}` : "/consultas";
   }, [initialState]);
+
+  const cerrarDetalle = useCallback(() => {
+    window.close();
+    window.setTimeout(() => {
+      router.push(consultasHref);
+    }, 200);
+  }, [consultasHref, router]);
 
   const localesCabecera = useMemo(() => {
     const disponibles = [...new Set(resultado.localesDisponibles)].filter(Boolean);
@@ -164,7 +187,10 @@ export function PantallaConsultasDetalle({
         bruto: number;
         emitidas: number;
         neto: number;
-        emitidasDetalle: FamiliaDetalle["emitidasDetalle"];
+        recibidasDetalle: FacturaDetalleLinea[];
+        emitidasDetalle: FacturaDetalleLinea[];
+        alquileresDetalle: FacturaDetalleLinea[];
+        notasVariasDetalle: FacturaDetalleLinea[];
       }
     >();
     resultado.datos.detalleClasificacion.forEach((row) => {
@@ -173,13 +199,19 @@ export function PantallaConsultasDetalle({
         bruto: 0,
         emitidas: 0,
         neto: 0,
+        recibidasDetalle: [],
         emitidasDetalle: [],
+        alquileresDetalle: [],
+        notasVariasDetalle: [],
       };
       familiaMap.set(key, {
         bruto: round2(actual.bruto + row.gastoBruto),
         emitidas: round2(actual.emitidas + row.emitidas),
         neto: round2(actual.neto + row.gastoNeto),
+        recibidasDetalle: [...actual.recibidasDetalle, ...row.recibidasDetalle],
         emitidasDetalle: [...actual.emitidasDetalle, ...row.emitidasDetalle],
+        alquileresDetalle: [...actual.alquileresDetalle, ...row.alquileresDetalle],
+        notasVariasDetalle: [...actual.notasVariasDetalle, ...row.notasVariasDetalle],
       });
     });
 
@@ -214,7 +246,10 @@ export function PantallaConsultasDetalle({
             bruto: 0,
             emitidas: 0,
             neto: 0,
+            recibidasDetalle: [],
             emitidasDetalle: [],
+            alquileresDetalle: [],
+            notasVariasDetalle: [],
           };
 
           if (tipo === TIPO_INGRESOS && familia === FAMILIA_CAJA) {
@@ -230,7 +265,19 @@ export function PantallaConsultasDetalle({
             porcentajeBruto: porcentajeSobreCaja(resumen.bruto),
             porcentajeEmitidas: porcentajeSobreCaja(resumen.emitidas),
             porcentajeNeto: porcentajeSobreCaja(resumen.neto),
+            recibidasDetalle: [...resumen.recibidasDetalle].sort((a, b) => {
+              if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+              return b.movimientoId.localeCompare(a.movimientoId);
+            }),
             emitidasDetalle: [...resumen.emitidasDetalle].sort((a, b) => {
+              if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+              return b.movimientoId.localeCompare(a.movimientoId);
+            }),
+            alquileresDetalle: [...resumen.alquileresDetalle].sort((a, b) => {
+              if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+              return b.movimientoId.localeCompare(a.movimientoId);
+            }),
+            notasVariasDetalle: [...resumen.notasVariasDetalle].sort((a, b) => {
               if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
               return b.movimientoId.localeCompare(a.movimientoId);
             }),
@@ -253,6 +300,39 @@ export function PantallaConsultasDetalle({
     resultado,
   ]);
 
+  const lineasExpandibles = useMemo(
+    () =>
+      detalleTipos.flatMap((bloque) =>
+        bloque.familias
+          .filter(familiaTieneDetalleExpandible)
+          .map((familia) => claveLineaFamilia(bloque.tipo, familia.familia))
+      ),
+    [detalleTipos]
+  );
+
+  const todasExpandidas =
+    lineasExpandibles.length > 0 && lineasExpandibles.every((clave) => expandidas.has(clave));
+
+  const alternarTodas = () => {
+    if (todasExpandidas) {
+      setExpandidas(new Set());
+      return;
+    }
+    setExpandidas(new Set(lineasExpandibles));
+  };
+
+  const alternarLinea = (clave: string) => {
+    setExpandidas((prev) => {
+      const next = new Set(prev);
+      if (next.has(clave)) {
+        next.delete(clave);
+      } else {
+        next.add(clave);
+      }
+      return next;
+    });
+  };
+
   const exportarCsv = () => {
     const lineas = [
       ["Consulta detalle"],
@@ -272,8 +352,15 @@ export function PantallaConsultasDetalle({
             familia.neto,
             familia.porcentajeNeto,
           ],
+          ...familia.recibidasDetalle.map((recibida) => [
+            `      Recibida ${recibida.numeroFactura} ${recibida.contraparte} ${fmtDate(recibida.fecha)}`,
+            recibida.base,
+            "",
+            recibida.total,
+            "",
+          ]),
           ...familia.emitidasDetalle.map((emitida) => [
-            `      Emitida ${fmtDate(emitida.fecha)} ${emitida.local}`,
+            `      Emitida ${emitida.numeroFactura} ${emitida.contraparte} ${fmtDate(emitida.fecha)}`,
             "",
             -emitida.importe,
             "",
@@ -385,12 +472,13 @@ export function PantallaConsultasDetalle({
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 p-3">
       <div className="print-hide flex items-center justify-between gap-3">
-        <Link
-          href={volverHref}
+        <button
+          type="button"
+          onClick={cerrarDetalle}
           className="rounded-2xl border border-[#d7c0b9] bg-[linear-gradient(180deg,#fffaf8_0%,#f4ebe7_100%)] px-4 py-2 text-sm font-bold text-[#6f534b]"
         >
-          Volver
-        </Link>
+          Cerrar
+        </button>
         <div className="flex gap-2">
           <button
             type="button"
@@ -464,8 +552,19 @@ export function PantallaConsultasDetalle({
           </header>
 
           <section className="mt-8">
-            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#8a6458]">
-              Tipos y familias
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#8a6458]">
+                Tipos y familias
+              </div>
+              {lineasExpandibles.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={alternarTodas}
+                  className="rounded-2xl border border-[#d0b1a4] bg-[linear-gradient(180deg,#fbf3ef_0%,#efe1da_100%)] px-4 py-1.5 text-xs font-bold text-[#6a4b43]"
+                >
+                  {todasExpandidas ? "Ocultar todo" : "Ampliar todo"}
+                </button>
+              ) : null}
             </div>
 
             <div className="mt-4 overflow-hidden rounded-[22px] border border-[#e2cfc8] bg-[rgba(255,251,248,0.9)]">
@@ -487,66 +586,57 @@ export function PantallaConsultasDetalle({
                   </div>
 
                   <div className="divide-y divide-[#f0e3de]">
-                    {bloque.familias.map((familia) => (
-                      <div key={`${bloque.tipo}-${familia.familia}`} className="px-5 py-4 text-sm text-[#4b332d]">
-                        <div className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-center gap-3">
-                          <div className="pl-6 font-medium text-[#60453d]">{familia.familia}</div>
-                          <div className="text-right font-black text-[#432c26]">
-                            {fmtMoney(familia.neto)}
+                    {bloque.familias.map((familia) => {
+                      const clave = claveLineaFamilia(bloque.tipo, familia.familia);
+                      const puedeAmpliar = familiaTieneDetalleExpandible(familia);
+                      const abierta = expandidas.has(clave);
+
+                      return (
+                        <div
+                          key={`${bloque.tipo}-${familia.familia}`}
+                          className="px-5 py-4 text-sm text-[#4b332d]"
+                        >
+                          <div className="grid grid-cols-[minmax(0,1fr)_160px_100px_auto] items-center gap-3">
+                            <div className="pl-6 font-medium text-[#60453d]">{familia.familia}</div>
+                            <div className="text-right font-black text-[#432c26]">
+                              {fmtMoney(familia.neto)}
+                            </div>
+                            <div className="text-right font-black text-[#8a6458]">
+                              {fmtPercent(familia.porcentajeNeto)}
+                            </div>
+                            {puedeAmpliar ? (
+                              <button
+                                type="button"
+                                onClick={() => alternarLinea(clave)}
+                                className="rounded-xl border border-[#dcc8c2] bg-[linear-gradient(180deg,#fffaf8_0%,#f5ece8_100%)] px-3 py-1 text-[10px] font-bold text-[#765650]"
+                              >
+                                {abierta ? "Ocultar" : "Ampliar"}
+                              </button>
+                            ) : (
+                              <div className="w-[72px]" />
+                            )}
                           </div>
-                          <div className="text-right font-black text-[#8a6458]">
-                            {fmtPercent(familia.porcentajeNeto)}
-                          </div>
+
+                          {abierta && puedeAmpliar ? (
+                            <DetalleFacturasExpandido
+                              bruto={familia.bruto}
+                              emitidas={familia.emitidas}
+                              porcentajeBruto={familia.porcentajeBruto}
+                              porcentajeEmitidas={familia.porcentajeEmitidas}
+                              recibidas={familia.recibidasDetalle}
+                              alquileres={familia.alquileresDetalle}
+                              emitidasDetalle={familia.emitidasDetalle}
+                              notasVarias={familia.notasVariasDetalle}
+                              fmtMoney={fmtMoney}
+                              fmtNegativeMoney={fmtNegativeMoney}
+                              fmtPercent={fmtPercent}
+                              fmtNegativePercent={fmtNegativePercent}
+                              fmtDate={fmtDate}
+                            />
+                          ) : null}
                         </div>
-
-                        {familia.emitidasDetalle.length > 0 ? (
-                          <div className="mt-2 space-y-1 pl-10">
-                            <div className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[10px]">
-                              <div className="font-semibold text-[#8a7067]">
-                                Total fras
-                              </div>
-                              <div className="text-right font-semibold text-[#6b544d]">
-                                {fmtMoney(familia.bruto)}
-                              </div>
-                              <div className="text-right font-semibold text-[#8a7067]">
-                                {fmtPercent(familia.porcentajeBruto)}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[10px]">
-                              <div className="font-semibold text-[#9b6d60]">
-                                Total abonos
-                              </div>
-                              <div className="text-right font-semibold text-[#8b4334]">
-                                {fmtNegativeMoney(familia.emitidas)}
-                              </div>
-                              <div className="text-right font-semibold text-[#9b6d60]">
-                                {fmtNegativePercent(familia.porcentajeEmitidas)}
-                              </div>
-                            </div>
-
-                            <div className="space-y-1 pl-6">
-                              {familia.emitidasDetalle.map((emitida) => (
-                                <div
-                                  key={emitida.movimientoId}
-                                  className="grid grid-cols-[minmax(0,1fr)_150px_100px] gap-3 px-2 py-1 text-[9px]"
-                                >
-                                  <div className="font-medium text-[#7d645c]">
-                                    {fmtDate(emitida.fecha)} - {emitida.local}
-                                  </div>
-                                  <div className="text-right font-semibold text-[#8b4334]">
-                                    {fmtNegativeMoney(emitida.importe)}
-                                  </div>
-                                  <div className="text-right font-semibold text-[#9b6d60]">
-                                    {fmtNegativePercent(emitida.porcentaje)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               ))}
