@@ -18,6 +18,10 @@ import {
   type RepartoRiverocioManual,
 } from "@/modules/consultas/utils/reparto-riverocio";
 import {
+  listarRepartosEspeciales,
+  type RepartoEspecial,
+} from "@/modules/consultas/utils/reparto-especial";
+import {
   consultaStateToQueryString,
   ESTADO_CONSULTA_INICIAL,
   esEstadoConsultaVacio,
@@ -227,6 +231,8 @@ export function PantallaConsultas({
   );
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
   const [repartosRiverocio, setRepartosRiverocio] = useState<RepartoRiverocioManual[]>([]);
+  const [repartosEspeciales, setRepartosEspeciales] = useState<RepartoEspecial[]>([]);
+  const [avisoRepartosEspeciales, setAvisoRepartosEspeciales] = useState<string | null>(null);
 
   useEffect(() => {
     guardarConsultaState(state);
@@ -237,13 +243,16 @@ export function PantallaConsultas({
 
     const cargar = async () => {
       try {
-        const [data, repartos] = await Promise.all([
+        const [data, repartos, especiales] = await Promise.all([
           cargarOperativaConsultas(clasificacion),
           listarRepartosRiverocioManuales(),
+          listarRepartosEspeciales(),
         ]);
         if (!cancelado) {
           setOperativa(data);
           setRepartosRiverocio(repartos);
+          setRepartosEspeciales(especiales.repartos);
+          setAvisoRepartosEspeciales(especiales.disponible ? null : especiales.mensaje);
         }
       } catch (error) {
         console.error("No se pudo cargar la operativa para consultas", error);
@@ -282,8 +291,9 @@ export function PantallaConsultas({
       operativa,
       state,
       repartosRiverocio,
+      repartosEspeciales,
     }),
-    [clasificacion, maestros, operativa, repartosRiverocio, state]
+    [clasificacion, maestros, operativa, repartosEspeciales, repartosRiverocio, state]
   );
 
   const detalleHref = useMemo(() => {
@@ -293,6 +303,10 @@ export function PantallaConsultas({
   const repartoRiverocioHref = useMemo(() => {
     const query = consultaStateToQueryString(state);
     return query ? `/consultas/reparto-riverocio?${query}` : "/consultas/reparto-riverocio";
+  }, [state]);
+  const repartosEspecialesHref = useMemo(() => {
+    const query = consultaStateToQueryString(state);
+    return query ? `/consultas/repartos-especiales?${query}` : "/consultas/repartos-especiales";
   }, [state]);
 
   return (
@@ -641,7 +655,7 @@ export function PantallaConsultas({
               <div className="mt-1 text-center text-base font-black leading-tight">{resultado.textoLocales}</div>
               <div className="mt-1 text-center text-xs leading-5 text-[#ead8d1]">
                 {resultado.datos.aplicarReparto
-                  ? "Locales operativos con reparto de Empresa por caja global."
+                  ? "Locales operativos con reparto de Empresa por la caja de cada mes."
                   : "Total grupo con Empresa como bloque propio."}
               </div>
               <div className="mt-1 grid gap-2 xl:grid-cols-2">
@@ -755,9 +769,9 @@ export function PantallaConsultas({
               nota="Con compensacion de emitidas."
             />
             <MiniResumen
-              titulo="Emitidas caja"
-              valor={fmtMoney(resultado.datos.emitidasCajaIgnoradas)}
-              nota="No duplican caja."
+              titulo="Emitidas en caja"
+              valor={fmtMoney(resultado.datos.emitidasCajaIncluidas)}
+              nota="Ya sumadas a la caja de su local."
             />
             <MiniResumen
               titulo="% sobre caja"
@@ -766,6 +780,24 @@ export function PantallaConsultas({
               fuerte
             />
           </div>
+          <div className="flex justify-end">
+            <Link
+              href={repartosEspecialesHref}
+              className="rounded-2xl border border-[#9f6425] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-1.5 text-center text-sm font-black text-[#5a3025] shadow-[0_12px_20px_rgba(85,52,46,0.12)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.02] hover:border-[#7f4718]"
+            >
+              Repartos especiales
+            </Link>
+          </div>
+          {avisoRepartosEspeciales ? (
+            <p className="text-right text-[11px] font-semibold leading-4 text-[#8a5144]">
+              {avisoRepartosEspeciales}
+            </p>
+          ) : null}
+          {resultado.datos.avisosReparto.map((aviso) => (
+            <p key={aviso} className="text-[11px] font-semibold leading-4 text-[#8a5144]">
+              {aviso}
+            </p>
+          ))}
         </section>
       </div>
     </section>

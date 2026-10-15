@@ -3,6 +3,17 @@
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
+import {
+  etiquetaMesLarga,
+  mesDeFecha,
+  mesIntersectaPeriodo,
+  repartirPorPesos,
+  repartirPorPorcentajes,
+  tratamientoEmitida,
+  trozosDeMovimiento,
+  type TratamientoEmitida,
+} from "./imputacion-consulta";
+import type { RepartoEspecial } from "@/modules/consultas/utils/reparto-especial";
 import type { RepartoRiverocioManual } from "@/modules/consultas/utils/reparto-riverocio";
 
 export type RegistroBase = {
@@ -36,6 +47,9 @@ export type FacturaDetalleLinea = {
   porcentaje: number;
   esEmitidaCaja?: boolean;
   esCompensatoria?: boolean;
+  origen?: string;
+  imputacionId?: string;
+  mesImputacion?: string;
 };
 
 export type OperativaConsultaData = {
@@ -80,6 +94,9 @@ export type Movimiento = {
   proveedor: string;
   cliente: string;
   pagado: boolean;
+  mesImputacion?: string;
+  especial?: boolean;
+  tratamiento?: TratamientoEmitida | "no-emitida";
 };
 
 export type ResumenLocal = {
@@ -105,6 +122,7 @@ export type ResumenClasificacion = {
   emitidasDetalle: FacturaDetalleLinea[];
   alquileresDetalle: FacturaDetalleLinea[];
   notasVariasDetalle: FacturaDetalleLinea[];
+  otrosDetalle: FacturaDetalleLinea[];
 };
 
 export const TIPO_INGRESOS = "Ingresos";
@@ -379,12 +397,14 @@ export function calcularConsulta({
   operativa,
   state,
   repartosRiverocio = [],
+  repartosEspeciales = [],
 }: {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
   operativa: OperativaConsultaData;
   state: ConsultaState;
   repartosRiverocio?: RepartoRiverocioManual[];
+  repartosEspeciales?: RepartoEspecial[];
 }) {
   const movimientos = obtenerMovimientosConsulta(clasificacion, operativa);
   const localesDisponibles = [
@@ -442,49 +462,76 @@ export function calcularConsulta({
     return true;
   };
 
-  const base = movimientos.filter((item) => {
+  const repartoEspecialPorId = new Map(repartosEspeciales.map((item) => [item.movimientoId, item]));
+  const calculo = movimientos.flatMap((item) => {
+    const trozos = trozosDeMovimiento(item, repartoEspecialPorId.get(item.id));
+    return trozos.map((trozo) => {
+      const tratamiento = item.clase === "emitida" ? tratamientoEmitida(item) : "no-emitida";
+      return {
+        ...item,
+        mesImputacion: trozo.mes,
+        especial: trozo.especial,
+        conIva: trozo.conIva,
+        sinIva: trozo.sinIva,
+        iva: trozo.iva,
+        tratamiento,
+        clase: tratamiento === "caja" ? ("caja" as const) : item.clase,
+      } satisfies Movimiento;
+    });
+  }).filter((item) => item.tratamiento !== "contabilidad");
+
+  const enPeriodo = (item: Movimiento) =>
+    item.especial
+      ? mesIntersectaPeriodo(item.mesImputacion ?? "", state.desde, state.hasta)
+      : inRange(item.fecha, state.desde, state.hasta);
+
+  const base = calculo.filter((item) => {
     const localIncluido = aplicarReparto
       ? setLocales.has(item.local) || item.esEmpresa
       : setLocales.has(item.local);
 
-    return localIncluido && inRange(item.fecha, state.desde, state.hasta);
+    return localIncluido && enPeriodo(item);
   });
   const setLocalesOperativosNegocio = new Set(localesOperativosNegocio);
-  const baseRepartoEmpresa = movimientos.filter(
-    (item) =>
-      !item.esEmpresa &&
-      setLocalesOperativosNegocio.has(item.local) &&
-      inRange(item.fecha, state.desde, state.hasta)
-  );
-  const cajas = base.filter((item) => item.clase === "caja");
+  const cajas = base.filter((item) => {
+    if (item.clase !== "caja") return false;
+    if (!aplicarReparto) return true;
+    return !item.esEmpresa && setLocalesSeleccionadosOperativos.has(item.local);
+  });
   const emitidas = base.filter((item) => item.clase === "emitida");
   const gastos = base.filter((item) => item.clase === "gasto");
-  const cajasRepartoEmpresa = baseRepartoEmpresa.filter((item) => item.clase === "caja");
+  const pesosCajaPorMes = new Map<string, Map<string, number>>();
+  calculo.forEach((item) => {
+    if (item.clase !== "caja" || item.esEmpresa) return;
+    if (!setLocalesOperativosNegocio.has(item.local)) return;
+    const mes = item.mesImputacion || mesDeFecha(item.fecha);
+    if (!mes) return;
+    const delMes = pesosCajaPorMes.get(mes) ?? new Map<string, number>();
+    delMes.set(item.local, round2((delMes.get(item.local) ?? 0) + importe(item)));
+    pesosCajaPorMes.set(mes, delMes);
+  });
 
   const cajaUsada = round2(cajas.reduce((acc, item) => acc + importe(item), 0));
   const ivaCaja = round2(cajas.reduce((acc, item) => acc + item.iva, 0));
-  const emitidasCaja = emitidas.filter((item) => item.esEmitidaCaja);
-  const emitidasNoCaja = emitidas.filter((item) => !item.esEmitidaCaja);
   const clavesGasto = new Set(gastos.map((item) => construirClaveCoincidencia(item)));
-  const emitidasNoCajaCompensadas = emitidasNoCaja.filter((item) =>
-    clavesGasto.has(construirClaveCoincidencia(item))
+  const emitidasCompensadas = emitidas.filter(
+    (item) =>
+      item.tratamiento === "compensacion" || clavesGasto.has(construirClaveCoincidencia(item))
   );
-  const emitidasNoCajaSinCoincidencia = emitidasNoCaja.filter(
-    (item) => !clavesGasto.has(construirClaveCoincidencia(item))
+  const emitidasSinCoincidencia = emitidas.filter(
+    (item) =>
+      item.tratamiento !== "compensacion" && !clavesGasto.has(construirClaveCoincidencia(item))
   );
-  const emitidasCajaIgnoradas = round2(
-    emitidasCaja.reduce((acc, item) => acc + importe(item), 0)
+  const emitidasCajaIncluidas = round2(
+    cajas.filter((item) => item.origen === "facturas-emitidas").reduce((acc, item) => acc + importe(item), 0)
   );
   const emitidasCompensacionTotal = round2(
-    emitidasNoCajaCompensadas.reduce((acc, item) => acc + importe(item), 0)
-  );
-  const emitidasSinCoincidenciaTotal = round2(
-    emitidasNoCajaSinCoincidencia.reduce((acc, item) => acc + importe(item), 0)
+    emitidasCompensadas.reduce((acc, item) => acc + importe(item), 0)
   );
 
   const gastosSel = gastos.filter(matchGasto);
-  const emitidasSel = emitidasNoCajaCompensadas.filter(matchGasto);
-  const emitidasSinCoincidenciaSel = emitidasNoCajaSinCoincidencia;
+  const emitidasSel = emitidasCompensadas.filter(matchGasto);
+  const emitidasSinCoincidenciaSel = emitidasSinCoincidencia;
   const gastosEmpresa = gastosSel.filter((item) => item.esEmpresa);
   const gastosLocales = gastosSel.filter((item) => !item.esEmpresa);
   const emitidasEmpresa = emitidasSel.filter((item) => item.esEmpresa);
@@ -496,6 +543,8 @@ export function calcularConsulta({
   const repartoRiverocioMap = new Map(
     repartosRiverocio.map((item) => [item.movimientoId, item])
   );
+  const avisosReparto: string[] = [];
+  const avisosRepartoVistos = new Set<string>();
 
   const porLocal = new Map<string, ResumenLocal>();
   locales.forEach((local) => {
@@ -524,51 +573,62 @@ export function calcularConsulta({
     if (row) row.emitidas = round2(row.emitidas + importe(item));
   });
 
-  const cajaOperativa = round2(
-    cajasRepartoEmpresa.reduce((acc, item) => acc + importe(item), 0)
-  );
-  const cajaPorLocal = new Map<string, number>();
-  cajasRepartoEmpresa.forEach((item) => {
-    cajaPorLocal.set(item.local, round2((cajaPorLocal.get(item.local) ?? 0) + importe(item)));
-  });
-
-  function construirRepartoAutomatico(total: number) {
-    const reparto = new Map<string, number>();
-
-    if (cajaOperativa <= 0) {
-      localesOperativosNegocio.forEach((local) => reparto.set(local, 0));
-      return reparto;
-    }
-
-    localesOperativosNegocio.forEach((local) => {
-      const peso = (cajaPorLocal.get(local) ?? 0) / cajaOperativa;
-      reparto.set(local, round2(total * peso));
-    });
-
-    return reparto;
+  function registrarRepartoPendiente(item: Movimiento) {
+    const mes = item.mesImputacion || mesDeFecha(item.fecha) || "";
+    const clave = `${item.id}|${mes}`;
+    if (avisosRepartoVistos.has(clave)) return;
+    avisosRepartoVistos.add(clave);
+    const quien = item.cliente || item.proveedor || item.numeroFactura || item.id;
+    avisosReparto.push(
+      `${etiquetaMesLarga(mes)} no tiene Caja suficiente en Cue, Hangar y Tarantino para calcular porcentajes. ${quien} no se ha repartido. Revisa la Caja de ese mes o guarda un reparto manual en Reparto Riverocio.`
+    );
   }
 
-  function construirRepartoManual(item: Movimiento, total: number) {
-    const configuracion = repartoRiverocioMap.get(item.id);
-    if (!configuracion) {
-      return null;
-    }
+  function pesosDelMes(mes: string) {
+    const delMes = pesosCajaPorMes.get(mes);
+    return localesOperativosNegocio.map((local) => ({
+      local,
+      peso: delMes?.get(local) ?? 0,
+    }));
+  }
 
-    const reparto = new Map<string, number>();
-    localesOperativosNegocio.forEach((local) => {
-      const porcentaje = Number(configuracion.porcentajes[local] ?? 0);
-      reparto.set(local, round2(total * (porcentaje / 100)));
-    });
-    return reparto;
+  function mesPuedeRepartirse(mes: string) {
+    const pesos = pesosDelMes(mes);
+    if (pesos.some((item) => item.peso < 0)) return false;
+    return pesos.reduce((acc, item) => acc + item.peso, 0) > 0;
   }
 
   function construirRepartoEmpresa(item: Movimiento, total: number) {
-    return construirRepartoManual(item, total) ?? construirRepartoAutomatico(total);
+    const configuracion = repartoRiverocioMap.get(item.id);
+    if (configuracion) {
+      return repartirPorPorcentajes(total, localesOperativosNegocio, configuracion.porcentajes);
+    }
+
+    const mes = item.mesImputacion || mesDeFecha(item.fecha) || "";
+    if (!mesPuedeRepartirse(mes)) {
+      registrarRepartoPendiente(item);
+      return null;
+    }
+
+    return repartirPorPesos(total, pesosDelMes(mes));
+  }
+
+  function visibleEmpresa(item: Movimiento, total: number) {
+    if (!(item.esEmpresa && aplicarReparto)) return total;
+    const reparto = construirRepartoEmpresa(item, total);
+    if (!reparto) return null;
+    return round2(
+      [...setLocalesSeleccionadosOperativos].reduce(
+        (acc, local) => acc + (reparto.get(local) ?? 0),
+        0
+      )
+    );
   }
 
   if (aplicarReparto) {
     gastosEmpresa.forEach((item) => {
       const reparto = construirRepartoEmpresa(item, importe(item));
+      if (!reparto) return;
       [...porLocal.values()].forEach((row) => {
         row.empresa = round2(row.empresa + (reparto.get(row.local) ?? 0));
       });
@@ -576,6 +636,7 @@ export function calcularConsulta({
 
     emitidasEmpresa.forEach((item) => {
       const reparto = construirRepartoEmpresa(item, importe(item));
+      if (!reparto) return;
       [...porLocal.values()].forEach((row) => {
         row.empresa = round2(row.empresa - (reparto.get(row.local) ?? 0));
       });
@@ -599,9 +660,15 @@ export function calcularConsulta({
   });
 
   const gastoNeto = round2([...porLocal.values()].reduce((acc, item) => acc + item.neto, 0));
+  const emitidasSinCoincidenciaVisible = round2(
+    emitidasSinCoincidenciaSel.reduce(
+      (acc, item) => acc + (visibleEmpresa(item, importe(item)) ?? 0),
+      0
+    )
+  );
   const ingresoSeleccionado = round2(
     (incluyeCaja ? cajaUsada : 0) +
-      (incluyeEmitidasSinCoincidencia ? emitidasSinCoincidenciaTotal : 0)
+      (incluyeEmitidasSinCoincidencia ? emitidasSinCoincidenciaVisible : 0)
   );
   const gastoSeleccionado =
     hayFiltroGasto ||
@@ -612,29 +679,25 @@ export function calcularConsulta({
       : 0;
   const importeSeleccion = round2(ingresoSeleccionado + gastoSeleccionado);
   const porcentaje = cajaUsada > 0 ? round2((gastoNeto / cajaUsada) * 100) : 0;
-  const beneficio = round2(cajaUsada + emitidasSinCoincidenciaTotal - gastoNeto);
+  const beneficio = round2(cajaUsada + emitidasSinCoincidenciaVisible - gastoNeto);
 
   function mkFacturaDetalleLinea(
     item: Movimiento,
     options?: { esCompensatoria?: boolean }
-  ): FacturaDetalleLinea {
+  ): FacturaDetalleLinea | null {
     const totalFull = importe(item);
-    const totalVis =
-      item.esEmpresa && aplicarReparto
-        ? round2(
-            [...setLocalesSeleccionadosOperativos].reduce(
-              (acc, local) =>
-                acc + (construirRepartoEmpresa(item, totalFull).get(local) ?? 0),
-              0
-            )
-          )
-        : totalFull;
-    const factor = totalFull > 0 ? totalVis / totalFull : 1;
+    const totalVis = visibleEmpresa(item, totalFull);
+    if (totalVis === null) return null;
+    const factor = totalFull !== 0 ? totalVis / totalFull : 1;
     const contraparte =
-      item.origen === "facturas-emitidas" ? item.cliente || "-" : item.proveedor || "-";
+      item.origen === "facturas-emitidas"
+        ? item.cliente || item.proveedor || "-"
+        : item.proveedor || "-";
 
     return {
       movimientoId: item.id,
+      imputacionId: `${item.id}|${item.mesImputacion ?? item.fecha}`,
+      mesImputacion: item.mesImputacion,
       numeroFactura: item.numeroFactura || "-",
       contraparte,
       fecha: item.fecha,
@@ -647,128 +710,90 @@ export function calcularConsulta({
       porcentaje: cajaUsada > 0 ? round2((totalVis / cajaUsada) * 100) : 0,
       esEmitidaCaja: item.esEmitidaCaja,
       esCompensatoria: options?.esCompensatoria,
+      origen: item.origen,
+    };
+  }
+
+  function filaDetalleVacia(
+    key: string,
+    tipo: string,
+    familia: string,
+    subfamilia: string
+  ): ResumenClasificacion {
+    return {
+      key,
+      tipo,
+      familia,
+      subfamilia,
+      gastoBruto: 0,
+      emitidas: 0,
+      gastoNeto: 0,
+      iva: 0,
+      recibidasDetalle: [],
+      emitidasDetalle: [],
+      alquileresDetalle: [],
+      notasVariasDetalle: [],
+      otrosDetalle: [],
     };
   }
 
   const detalleMap = new Map<string, ResumenClasificacion>();
   gastosSel.forEach((item) => {
+    const importeVisible = visibleEmpresa(item, importe(item));
+    if (importeVisible === null) return;
     const key = `${item.tipoLabel}|||${item.familiaLabel}|||${item.subfamilia}`;
-    const row = detalleMap.get(key) ?? {
-      key,
-      tipo: item.tipoLabel,
-      familia: item.familiaLabel,
-      subfamilia: item.subfamilia,
-      gastoBruto: 0,
-      emitidas: 0,
-      gastoNeto: 0,
-      iva: 0,
-      recibidasDetalle: [],
-      emitidasDetalle: [],
-      alquileresDetalle: [],
-      notasVariasDetalle: [],
-    };
-    const importeVisible = item.esEmpresa && aplicarReparto
-      ? round2(
-          [...setLocalesSeleccionadosOperativos].reduce(
-            (acc, local) => acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
-            0
-          )
-        )
-      : importe(item);
-    const ivaVisible = item.esEmpresa && aplicarReparto
-      ? round2(
-          [...setLocalesSeleccionadosOperativos].reduce(
-            (acc, local) => acc + (construirRepartoEmpresa(item, item.iva).get(local) ?? 0),
-            0
-          )
-        )
-      : item.iva;
+    const row = detalleMap.get(key) ?? filaDetalleVacia(key, item.tipoLabel, item.familiaLabel, item.subfamilia);
+    const ivaVisible = visibleEmpresa(item, item.iva) ?? 0;
+    const linea = mkFacturaDetalleLinea(item);
+    if (!linea) return;
     row.gastoBruto = round2(row.gastoBruto + importeVisible);
     row.iva = round2(row.iva + ivaVisible);
     if (item.origen === "facturas-recibidas") {
-      row.recibidasDetalle = [...row.recibidasDetalle, mkFacturaDetalleLinea(item)];
+      row.recibidasDetalle = [...row.recibidasDetalle, linea];
     }
     if (item.origen === "alquileres") {
-      row.alquileresDetalle = [...row.alquileresDetalle, mkFacturaDetalleLinea(item)];
+      row.alquileresDetalle = [...row.alquileresDetalle, linea];
     }
     if (item.origen === "notas-varias") {
       row.notasVariasDetalle = [
         ...row.notasVariasDetalle,
-        { ...mkFacturaDetalleLinea(item), contraparte: "Desconocido" },
+        { ...linea, contraparte: "Desconocido" },
       ];
+    }
+    if (
+      item.origen !== "facturas-recibidas" &&
+      item.origen !== "alquileres" &&
+      item.origen !== "notas-varias"
+    ) {
+      row.otrosDetalle = [...row.otrosDetalle, linea];
     }
     detalleMap.set(key, row);
   });
   emitidasSel.forEach((item) => {
+    const emitidasVisibles = visibleEmpresa(item, importe(item));
+    if (emitidasVisibles === null) return;
+    const linea = mkFacturaDetalleLinea(item, { esCompensatoria: true });
+    if (!linea) return;
     const key = `${item.tipoLabel}|||${item.familiaLabel}|||${item.subfamilia}`;
-    const row = detalleMap.get(key) ?? {
-      key,
-      tipo: item.tipoLabel,
-      familia: item.familiaLabel,
-      subfamilia: item.subfamilia,
-      gastoBruto: 0,
-      emitidas: 0,
-      gastoNeto: 0,
-      iva: 0,
-      recibidasDetalle: [],
-      emitidasDetalle: [],
-      alquileresDetalle: [],
-      notasVariasDetalle: [],
-    };
-    const emitidasVisibles = item.esEmpresa && aplicarReparto
-      ? round2(
-          [...setLocalesSeleccionadosOperativos].reduce(
-            (acc, local) => acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
-            0
-          )
-        )
-      : importe(item);
+    const row = detalleMap.get(key) ?? filaDetalleVacia(key, item.tipoLabel, item.familiaLabel, item.subfamilia);
     row.emitidas = round2(row.emitidas + emitidasVisibles);
-    row.emitidasDetalle = [
-      ...row.emitidasDetalle,
-      mkFacturaDetalleLinea(item, { esCompensatoria: true }),
-    ];
+    row.emitidasDetalle = [...row.emitidasDetalle, linea];
     detalleMap.set(key, row);
   });
 
   if (familiaIngresosEmitidasVisible) {
     emitidasSinCoincidenciaSel.forEach((item) => {
+      const importeVisible = visibleEmpresa(item, importe(item));
+      if (importeVisible === null) return;
+      const linea = mkFacturaDetalleLinea(item);
+      if (!linea) return;
       const key = `${TIPO_INGRESOS}|||${familiaIngresosEmitidasVisible}|||`;
-      const row = detalleMap.get(key) ?? {
-        key,
-        tipo: TIPO_INGRESOS,
-        familia: familiaIngresosEmitidasVisible,
-        subfamilia: "",
-        gastoBruto: 0,
-        emitidas: 0,
-        gastoNeto: 0,
-        iva: 0,
-        recibidasDetalle: [],
-        emitidasDetalle: [],
-        alquileresDetalle: [],
-        notasVariasDetalle: [],
-      };
-      const importeVisible =
-        item.esEmpresa && aplicarReparto
-          ? round2(
-              [...setLocalesSeleccionadosOperativos].reduce(
-                (acc, local) =>
-                  acc + (construirRepartoEmpresa(item, importe(item)).get(local) ?? 0),
-                0
-              )
-            )
-          : importe(item);
-      const ivaVisible =
-        item.esEmpresa && aplicarReparto
-          ? round2(
-              [...setLocalesSeleccionadosOperativos].reduce(
-                (acc, local) => acc + (construirRepartoEmpresa(item, item.iva).get(local) ?? 0),
-                0
-              )
-            )
-          : item.iva;
+      const row = detalleMap.get(key) ??
+        filaDetalleVacia(key, TIPO_INGRESOS, familiaIngresosEmitidasVisible, "");
+      const ivaVisible = visibleEmpresa(item, item.iva) ?? 0;
       row.gastoBruto = round2(row.gastoBruto + importeVisible);
       row.iva = round2(row.iva + ivaVisible);
+      row.emitidasDetalle = [...row.emitidasDetalle, linea];
       detalleMap.set(key, row);
     });
   }
@@ -794,9 +819,10 @@ export function calcularConsulta({
       aplicarReparto,
       cajaUsada,
       ivaCaja,
-      emitidasCajaIgnoradas,
+      emitidasCajaIncluidas,
       emitidasCompensacionTotal,
-      emitidasSinCoincidenciaTotal,
+      emitidasSinCoincidenciaTotal: emitidasSinCoincidenciaVisible,
+      avisosReparto,
       ingresoSeleccionado,
       bruto,
       gastoNeto,
@@ -807,6 +833,27 @@ export function calcularConsulta({
       beneficio,
       porLocal: [...porLocal.values()],
       detalleClasificacion,
+      cajasDetalle: cajas.map((item) => {
+        const total = importe(item);
+        const emitida = item.origen === "facturas-emitidas";
+        return {
+          movimientoId: item.id,
+          imputacionId: `${item.id}|${item.mesImputacion ?? item.fecha}`,
+          mesImputacion: item.mesImputacion,
+          numeroFactura: item.numeroFactura || "-",
+          contraparte: emitida ? `Emitida · ${item.cliente || item.local || "-"}` : item.local || "-",
+          fecha: item.fecha,
+          base: item.sinIva,
+          iva: item.iva,
+          total,
+          pagado: item.pagado,
+          local: item.local,
+          importe: total,
+          porcentaje: cajaUsada > 0 ? round2((total / cajaUsada) * 100) : 0,
+          esEmitidaCaja: emitida,
+          origen: item.origen,
+        } satisfies FacturaDetalleLinea;
+      }),
     },
   };
 }
