@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
 
 export type RepartoEspecial = {
   movimientoId: string;
@@ -112,6 +113,7 @@ export async function listarRepartosEspeciales(): Promise<ListadoRepartosEspecia
 }
 
 export async function guardarRepartoEspecial(reparto: RepartoEspecial) {
+  await exigirAdministrador();
   const normalizado = normalizarReparto(reparto);
   const errorMeses = validarMesesReparto(normalizado?.meses ?? reparto.meses);
   if (!normalizado || errorMeses) {
@@ -137,6 +139,7 @@ export async function guardarRepartoEspecial(reparto: RepartoEspecial) {
 }
 
 export async function eliminarRepartoEspecial(movimientoId: string) {
+  await exigirAdministrador();
   const { error } = await supabase
     .from(TABLA_REPARTOS_ESPECIALES)
     .delete()

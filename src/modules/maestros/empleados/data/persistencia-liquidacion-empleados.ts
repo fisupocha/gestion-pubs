@@ -1,4 +1,7 @@
+"use client";
+
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
 
 export type FiltroLiquidacionMensual = {
   fechaDesde: string;
@@ -312,6 +315,7 @@ export async function guardarAdelantoEmpleado({
   importe: number;
   observaciones: string;
 }) {
+  await exigirAdministrador();
   const { error } = await supabase.from("gestion_diaria_adelantos_empleados").insert({
     fecha,
     empleado_id: empleadoId,
@@ -325,6 +329,7 @@ export async function guardarAdelantoEmpleado({
 }
 
 export async function eliminarAdelantoEmpleado(id: number) {
+  await exigirAdministrador();
   const { error } = await supabase.from("gestion_diaria_adelantos_empleados").delete().eq("id", id);
 
   if (error) {
@@ -341,6 +346,7 @@ export async function guardarEstadoPagoLiquidacion({
   empleadoId: number;
   pagado: boolean;
 }) {
+  await exigirAdministrador();
   const { error } = await supabase.from("gestion_diaria_liquidacion_empleados").upsert(
     {
       periodo,

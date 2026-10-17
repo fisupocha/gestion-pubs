@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
 
 export type RepartoRiverocioManual = {
   movimientoId: string;
@@ -137,6 +138,7 @@ export async function listarRepartosRiverocioManuales() {
 export async function guardarRepartoRiverocioManual(
   reparto: RepartoRiverocioManual
 ) {
+  await exigirAdministrador();
   const normalizado = normalizarReparto(reparto);
   if (!normalizado) {
     throw new Error("Reparto Riverocio invalido");
@@ -167,6 +169,7 @@ export async function guardarRepartoRiverocioManual(
 }
 
 export async function eliminarRepartoRiverocioManual(movimientoId: string) {
+  await exigirAdministrador();
   removeLocal(movimientoId);
 
   try {

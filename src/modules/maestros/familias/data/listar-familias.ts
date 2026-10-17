@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 type TipoRelacionado = {
   id?: number;
@@ -13,6 +13,7 @@ type FamiliaRow = {
 };
 
 export async function listarFamilias() {
+  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase
     .from("familias")
     .select("id, nombre, tipo_id, tipos(id, nombre)")

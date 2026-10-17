@@ -1,6 +1,7 @@
-﻿import { supabase } from "@/lib/supabase";
+﻿import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 export async function listarConceptosGastosBancarios() {
+  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase
     .from("conceptos_gastos_bancarios")
     .select("id, nombre")

@@ -6,6 +6,12 @@ import {
   extraerMetaAdjunto,
 } from "@/lib/operativa/adjuntos-storage";
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
+import {
+  cajaDiariaPuedeSustituirMes,
+  cuadrantePuedeSustituirMes,
+  filasTraspasoCuadrante,
+} from "@/modules/operativa/utils/reglas-traspaso-mensual";
 
 type FormularioOperativa = {
   empresa: string;
@@ -315,6 +321,7 @@ async function guardarTabla(
   hidratar: (row: Record<string, unknown>, maestros: MaestrosPersistencia, clasificacion: ClasificacionMapa) => RegistroOperativa,
   clasificacion: ClasificacionMapa
 ) {
+  await exigirAdministrador();
   const maestros = await cargarMaestrosPersistencia();
   const query = registro.id
     ? supabase.from(tabla).update(dataGuardar).eq("id", registro.id)
@@ -967,6 +974,14 @@ export async function guardarCajaMensualDesdeGestionDiaria(
   fecha: string,
   totales: Array<{ local: string; totalCaja: number }>
 ) {
+  if (!cajaDiariaPuedeSustituirMes(fecha)) {
+    throw new Error(
+      "Enero, febrero y marzo de 2026 se conservan como Caja manual. El traspaso desde Caja diaria empieza en abril de 2026."
+    );
+  }
+
+  await exigirAdministrador();
+
   const maestros = await cargarMaestrosPersistencia();
   const tipoId = resolverId(maestros.tipos, "Ingresos");
   const familiaId = resolverFamiliaId(maestros.familias, "Caja", tipoId);
@@ -1042,6 +1057,20 @@ export async function guardarPersonalMensualDesdeCuadrante(
   fecha: string,
   totales: Array<{ local: string; familia: string; importe: number }>
 ) {
+  if (!cuadrantePuedeSustituirMes(fecha)) {
+    throw new Error(
+      "Enero y febrero de 2026 se conservan como Personal manual. El traspaso del cuadrante empieza en marzo de 2026."
+    );
+  }
+
+  await exigirAdministrador();
+
+  const traspasables = filasTraspasoCuadrante(totales);
+
+  if (traspasables.length === 0) {
+    return;
+  }
+
   const maestros = await cargarMaestrosPersistencia();
   const tipoId = resolverId(maestros.tipos, "Personal");
 
@@ -1049,7 +1078,7 @@ export async function guardarPersonalMensualDesdeCuadrante(
     throw new Error("No se pudo resolver el tipo Personal en BBDD");
   }
 
-  const filas = totales.map((item) => {
+  const filas = traspasables.map((item) => {
     const empresaId = resolverId(maestros.empresas, item.local);
     const familiaId = resolverFamiliaId(maestros.familias, item.familia, tipoId);
 

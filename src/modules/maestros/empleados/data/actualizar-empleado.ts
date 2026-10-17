@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 import { esFamiliaDePersonal } from "@/modules/maestros/empleados/data/validar-familia-personal";
 
 function parseDecimal(value: string) {
@@ -10,6 +10,7 @@ function parseDecimal(value: string) {
 }
 
 export async function actualizarEmpleado(formData: FormData) {
+  const supabase = await crearSupabaseServidor();
   const id = Number(formData.get("id"));
   const nombre = formData.get("nombre")?.toString().trim() ?? "";
   const familiaId = Number(formData.get("familiaId"));

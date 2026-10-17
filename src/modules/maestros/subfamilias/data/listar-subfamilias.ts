@@ -1,6 +1,7 @@
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 export async function listarSubfamilias() {
+  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase
     .from("subfamilias")
     .select("id, nombre, familia_id, familias(id, nombre, tipo_id, tipos(id, nombre))")

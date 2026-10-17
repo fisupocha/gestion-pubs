@@ -1,6 +1,7 @@
-﻿import { supabase } from "@/lib/supabase";
+﻿import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 export async function listarFormasPago() {
+  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase
     .from("formas_pago")
     .select("id, nombre")

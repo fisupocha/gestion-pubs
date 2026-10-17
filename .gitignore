@@ -34,6 +34,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# copia local de personal, no publicar
+backups/operativa-personal-agosto-2026-antes.json
+
+# clasificacion antigua de caja y personal, no publicar
+sql/clasificar-origen-caja-personal.sql
+
 # vercel
 .vercel
 

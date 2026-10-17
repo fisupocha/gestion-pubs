@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { CampoFecha } from "@/components/ui/campo-fecha";
-import { prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
+import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -533,8 +533,10 @@ export function PantallaGastosBancarios({
       return;
     }
 
+    let gestionAdjunto: Awaited<ReturnType<typeof prepararGuardadoAdjuntoOperativa>> | null = null;
+    let guardadoEnBase = false;
     try {
-      const gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
+      gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
         modulo: "gastos-bancarios",
         actual: archivoAdjunto,
         anterior: modoNuevo ? null : (registros[indiceActual]?.adjunto ?? null),
@@ -559,6 +561,7 @@ export function PantallaGastosBancarios({
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
+      guardadoEnBase = true;
       await gestionAdjunto.confirmar();
 
       const siguientes = modoNuevo
@@ -580,8 +583,15 @@ export function PantallaGastosBancarios({
       setFormulario(formularioGuardado);
       setArchivoAdjunto(registroGuardado.adjunto);
       setSnapshotInicial(crearSnapshot(formularioGuardado, registroGuardado.adjunto));
-    } catch {
-      window.alert("No se pudo guardar el gasto bancario en BBDD.");
+    } catch (error) {
+      if (!guardadoEnBase) {
+        await gestionAdjunto?.cancelar();
+      }
+      const mensaje =
+        error instanceof Error && error.message.startsWith("La sesión")
+          ? error.message
+          : "No se pudo guardar el gasto bancario en BBDD.";
+      window.alert(mensaje);
     }
   }
 
@@ -608,12 +618,12 @@ export function PantallaGastosBancarios({
     });
   }
 
-  function abrirAdjuntoTemporal() {
+  async function abrirAdjuntoTemporal() {
     if (!archivoAdjunto?.url) {
       return;
     }
 
-    window.open(archivoAdjunto.url, "_blank", "noopener,noreferrer");
+    await abrirAdjuntoOperativa(archivoAdjunto.url);
   }
 
   function quitarAdjunto() {

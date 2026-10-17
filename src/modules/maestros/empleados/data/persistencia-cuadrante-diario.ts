@@ -1,4 +1,7 @@
+"use client";
+
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
 
 export type RegistroCuadranteDiario = {
   id?: number;
@@ -205,6 +208,7 @@ export async function guardarCuadranteDiarioPersistido(
   fecha: string,
   registros: RegistroCuadranteDiario[]
 ) {
+  await exigirAdministrador();
   const existentes = await cargarTodasLasPaginas<{ id: number; empleado_id: number; hora: string }>(
     (from, to) =>
       supabase

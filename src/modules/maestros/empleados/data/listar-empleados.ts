@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 type FamiliaRelacionada = {
   id?: number;
@@ -15,6 +15,7 @@ type EmpleadoRow = {
 };
 
 export async function listarEmpleados() {
+  const supabase = await crearSupabaseServidor();
   const [{ data, error }, { data: horasData, error: horasError }] = await Promise.all([
     supabase
       .from("empleados")

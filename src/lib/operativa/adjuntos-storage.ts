@@ -1,8 +1,11 @@
 "use client";
 
+import { exigirAdministrador, rolSesionActual } from "@/modules/auth/exigir-administrador";
+import { puedeVerAdjunto } from "@/modules/auth/permisos-acceso";
 import { supabase } from "@/lib/supabase";
 
 const BUCKET_ADJUNTOS_OPERATIVA = "operativa-adjuntos";
+const MINUTOS_ENLACE_ADJUNTO = 10;
 
 export type AdjuntoOperativa = {
   file: File;
@@ -24,14 +27,29 @@ function esUrlBlob(url: string) {
 }
 
 function extraerRutaDesdeUrl(url: string) {
-  const marker = `/storage/v1/object/public/${BUCKET_ADJUNTOS_OPERATIVA}/`;
-  const index = url.indexOf(marker);
-
-  if (index < 0) {
+  if (!url || url.startsWith("blob:")) {
     return null;
   }
 
-  return decodeURIComponent(url.slice(index + marker.length));
+  const markers = [
+    `/storage/v1/object/public/${BUCKET_ADJUNTOS_OPERATIVA}/`,
+    `/storage/v1/object/sign/${BUCKET_ADJUNTOS_OPERATIVA}/`,
+    `/storage/v1/object/authenticated/${BUCKET_ADJUNTOS_OPERATIVA}/`,
+  ];
+  const marker = markers.find((item) => url.includes(item));
+
+  if (!marker) {
+    return null;
+  }
+
+  const index = url.indexOf(marker);
+  const ruta = decodeURIComponent(url.slice(index + marker.length)).split("?")[0]?.split("#")[0] ?? "";
+
+  if (!ruta || ruta.includes("..") || ruta.startsWith("/") || ruta.includes("\\")) {
+    return null;
+  }
+
+  return ruta;
 }
 
 async function borrarRutaStorage(ruta: string | null) {
@@ -39,6 +57,7 @@ async function borrarRutaStorage(ruta: string | null) {
     return;
   }
 
+  await exigirAdministrador();
   await supabase.storage.from(BUCKET_ADJUNTOS_OPERATIVA).remove([ruta]);
 }
 
@@ -65,6 +84,35 @@ export function extraerMetaAdjunto(adjunto: unknown) {
   return { nombre, url };
 }
 
+export async function abrirAdjuntoOperativa(url: string | null | undefined) {
+  if (!url) {
+    return;
+  }
+
+  if (esUrlBlob(url)) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const ruta = extraerRutaDesdeUrl(url);
+
+  if (!ruta || !puedeVerAdjunto(rolSesionActual(), ruta)) {
+    window.alert("No tienes permiso para ver este archivo.");
+    return;
+  }
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_ADJUNTOS_OPERATIVA)
+    .createSignedUrl(ruta, MINUTOS_ENLACE_ADJUNTO * 60);
+
+  if (error || !data?.signedUrl) {
+    window.alert("No se ha podido abrir el archivo.");
+    return;
+  }
+
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
 export async function prepararGuardadoAdjuntoOperativa({
   modulo,
   actual,
@@ -74,6 +122,8 @@ export async function prepararGuardadoAdjuntoOperativa({
   actual: AdjuntoOperativa;
   anterior: AdjuntoOperativa;
 }) {
+  await exigirAdministrador();
+
   const urlAnterior = anterior?.url ?? null;
   const rutaAnterior = urlAnterior && !esUrlBlob(urlAnterior) ? extraerRutaDesdeUrl(urlAnterior) : null;
 

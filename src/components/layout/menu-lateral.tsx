@@ -6,6 +6,7 @@ import {
   ResumenAccesoMenu,
   useAccesoApp,
 } from "@/components/acceso/control-acceso-app";
+import { esRutaPermitidaGestoria } from "@/modules/auth/permisos-acceso";
 import {
   itemConsultas,
   itemsGestionDiaria,
@@ -115,6 +116,10 @@ export function MenuLateral() {
   const pathname = usePathname();
   const acceso = useAccesoApp();
 
+  if (!acceso.sesionIniciada) {
+    return null;
+  }
+
   if (
     pathname === "/consultas/reparto-riverocio" ||
     pathname.startsWith("/maestros/empleados/cuadrante-demo") ||
@@ -127,15 +132,10 @@ export function MenuLateral() {
 
   const itemsOperativaVisibles = acceso.esAdmin
     ? itemsOperativa
-    : itemsOperativa.filter(
-        (item) =>
-          item.href === "/facturas-recibidas" ||
-          item.href === "/alquileres" ||
-          item.href === "/gastos-bancarios" ||
-          item.href === "/creditos" ||
-          item.href === "/impuestos" ||
-          item.href === "/facturas-emitidas"
-      );
+    : itemsOperativa.filter((item) => esRutaPermitidaGestoria(item.href));
+  const itemsMaestrosVisibles = acceso.esAdmin
+    ? itemsMaestros
+    : itemsMaestros.filter((item) => esRutaPermitidaGestoria(item.href));
 
   return (
     <aside className="w-full md:h-full md:min-h-0 md:w-[256px] md:flex-none">
@@ -155,19 +155,21 @@ export function MenuLateral() {
           <div className="mt-1.5 flex flex-col gap-1.5">
             <MenuBox
               titulo="Maestros"
-              items={itemsMaestros}
+              items={itemsMaestrosVisibles}
               pathname={pathname}
               itemsClassName="grid gap-1.5"
               itemClassName="min-h-[40px]"
             />
 
-            <MenuBox
-              titulo="Gestión diaria"
-              items={itemsGestionDiaria}
-              pathname={pathname}
-              itemsClassName="grid gap-1.5"
-              itemClassName="min-h-[40px]"
-            />
+            {acceso.esAdmin ? (
+              <MenuBox
+                titulo="Gestión diaria"
+                items={itemsGestionDiaria}
+                pathname={pathname}
+                itemsClassName="grid gap-1.5"
+                itemClassName="min-h-[40px]"
+              />
+            ) : null}
 
             {acceso.esAdmin ? (
               <Link

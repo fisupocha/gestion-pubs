@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 export async function crearFamilia(formData: FormData) {
+  const supabase = await crearSupabaseServidor();
   const nombre = formData.get("nombre")?.toString().trim() ?? "";
   const tipoIdTexto = formData.get("tipo_id")?.toString().trim() ?? "";
   const tipoId = Number(tipoIdTexto);

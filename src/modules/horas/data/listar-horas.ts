@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 type RelNombre = {
   id?: number;
@@ -22,6 +22,7 @@ type HoraRow = {
 };
 
 export async function listarHoras() {
+  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase
     .from("operativa_horas")
     .select(

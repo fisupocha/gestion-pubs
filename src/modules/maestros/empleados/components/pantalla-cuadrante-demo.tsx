@@ -12,6 +12,10 @@ import {
   type RegistroCuadranteDiario,
 } from "@/modules/maestros/empleados/data/persistencia-cuadrante-diario";
 import { guardarPersonalMensualDesdeCuadrante } from "@/modules/operativa/utils/persistencia-operativa";
+import {
+  esFamiliaPersonalOficina,
+  filasTraspasoCuadrante,
+} from "@/modules/operativa/utils/reglas-traspaso-mensual";
 
 const locales = {
   Tarantino: {
@@ -886,10 +890,22 @@ export function PantallaCuadranteDemo({
     }
 
     const fecha = finMes(`${resumenAno}-${resumenMes}-01`);
+    const familiasTraspaso = filasTraspasoCuadrante(resumenParaPersonal);
+
+    if (familiasTraspaso.length === 0) {
+      window.alert(
+        "Este mes solo tiene personal de oficina. Ese importe sigue como alta manual de Riverocio y no se traspasa."
+      );
+      return;
+    }
+
+    const avisoOficina = resumenParaPersonal.some((fila) => esFamiliaPersonalOficina(fila.familia))
+      ? "\n\nPersonal de oficina no se toca: sigue cargado a mano en Riverocio."
+      : "";
 
     if (
       !window.confirm(
-        `Se va a actualizar Operativa Personal de ${mesesAno.find((item) => item.value === resumenMes)?.label ?? resumenMes} ${resumenAno} con las familias usadas en ese mes.\n\nQuieres continuar?`
+        `Se va a actualizar Operativa Personal de ${mesesAno.find((item) => item.value === resumenMes)?.label ?? resumenMes} ${resumenAno} con las familias del cuadrante.${avisoOficina}\n\nQuieres continuar?`
       )
     ) {
       return;
@@ -900,7 +916,7 @@ export function PantallaCuadranteDemo({
 
       await guardarPersonalMensualDesdeCuadrante(
         fecha,
-        resumenParaPersonal.map((fila) => ({
+        familiasTraspaso.map((fila) => ({
           local: fila.local,
           familia: fila.familia,
           importe: fila.importe,

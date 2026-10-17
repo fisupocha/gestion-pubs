@@ -1,35 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
-
-type ModoAcceso = "admin" | "gestoria";
+import { PantallaLogin } from "@/modules/auth/components/pantalla-login";
+import { recordarRolSesion } from "@/modules/auth/exigir-administrador";
+import {
+  esRutaMaestrosGestoria,
+  esRutaPermitidaGestoria,
+  type RolAcceso,
+} from "@/modules/auth/permisos-acceso";
+import { supabase } from "@/lib/supabase";
 
 type AccesoAppContextValue = {
-  modo: ModoAcceso;
+  listo: boolean;
+  sesionIniciada: boolean;
   esAdmin: boolean;
   esGestoria: boolean;
-  activarAdmin: (clave: string) => boolean;
-  salirAdmin: () => void;
+  correo: string | null;
+  mensaje: string;
+  cerrarSesion: () => Promise<void>;
 };
 
-const CLAVE_ADMIN = "1324";
-const STORAGE_KEY = "gestion-pubs.modo-acceso";
-const listeners = new Set<() => void>();
+const CLAVE_ACCESO_ANTIGUA = "gestion-pubs.modo-acceso";
 const RUTAS_OPERATIVA_GESTORIA = new Set([
   "/facturas-recibidas",
+  "/facturas-emitidas",
   "/alquileres",
   "/gastos-bancarios",
   "/creditos",
   "/impuestos",
-  "/facturas-emitidas",
 ]);
 const TEXTOS_GESTORIA_OPERATIVA_PERMITIDOS = new Set([
   "<<",
@@ -48,52 +55,8 @@ const TITULOS_GESTORIA_OPERATIVA_PERMITIDOS = new Set([
 ]);
 const AccesoAppContext = createContext<AccesoAppContextValue | null>(null);
 
-function leerModoAcceso(): ModoAcceso {
-  if (typeof window === "undefined") {
-    return "gestoria";
-  }
-
-  return window.localStorage.getItem(STORAGE_KEY) === "admin"
-    ? "admin"
-    : "gestoria";
-}
-
-function notificarCambioAcceso() {
-  listeners.forEach((listener) => listener());
-}
-
-function suscribirAcceso(listener: () => void) {
-  listeners.add(listener);
-
-  const onStorage = () => {
-    listener();
-  };
-
-  window.addEventListener("storage", onStorage);
-
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
-}
-
-function esRutaMaestros(pathname: string) {
-  return pathname.startsWith("/maestros/");
-}
-
-function esRutaPermitidaGestoria(pathname: string) {
-  return (
-    pathname === "/login" ||
-    RUTAS_OPERATIVA_GESTORIA.has(pathname) ||
-    esRutaMaestros(pathname)
-  );
-}
-
 function normalizarTextoBoton(button: HTMLButtonElement) {
-  return (button.textContent ?? "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  return (button.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function esBotonPermitidoGestoria(button: HTMLButtonElement, pathname: string) {
@@ -104,7 +67,7 @@ function esBotonPermitidoGestoria(button: HTMLButtonElement, pathname: string) {
   const texto = normalizarTextoBoton(button);
   const title = (button.getAttribute("title") ?? "").trim().toLowerCase();
 
-  if (esRutaMaestros(pathname)) {
+  if (esRutaMaestrosGestoria(pathname)) {
     return !(
       texto.includes("nuevo") ||
       texto.includes("nueva") ||
@@ -123,58 +86,47 @@ function esBotonPermitidoGestoria(button: HTMLButtonElement, pathname: string) {
   return false;
 }
 
-function FormularioAccesoAdmin({
-  compacto = false,
-}: {
-  compacto?: boolean;
-}) {
-  const acceso = useAccesoApp();
-  const [clave, setClave] = useState("");
-  const [error, setError] = useState("");
+async function leerRol(userId: string): Promise<{ ok: true; rol: RolAcceso } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from("perfiles")
+    .select("rol")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  function enviar(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const ok = acceso.activarAdmin(clave.trim());
+    if (error) {
+    const texto = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
 
-    if (ok) {
-      setClave("");
-      setError("");
-      return;
+    if (error.code === "PGRST301" || texto.includes("jwt") || texto.includes("expired")) {
+      return {
+        ok: false,
+        error: "",
+      };
     }
 
-    setError("Clave incorrecta.");
+    if (texto.includes("perfiles") || error.code === "PGRST205" || error.code === "42P01") {
+      return {
+        ok: false,
+        error: "El acceso todavía no está activado. No se ha cargado ningún dato.",
+      };
+    }
+
+    return {
+      ok: false,
+      error: "No se ha podido comprobar el permiso. No se ha cargado ningún dato.",
+    };
   }
 
-  return (
-    <form onSubmit={enviar} className={compacto ? "grid gap-2" : "grid gap-3"}>
-      <input
-        type="password"
-        value={clave}
-        onChange={(e) => {
-          setClave(e.target.value);
-          if (error) {
-            setError("");
-          }
-        }}
-        placeholder="Clave de admin"
-        className="w-full rounded-2xl border border-[#d8c2b6] bg-white px-4 py-2.5 text-sm text-[#3f2a23] outline-none"
-      />
-      <button
-        type="submit"
-        className="rounded-2xl border border-[#b9796d] bg-[linear-gradient(180deg,#f5e3dc_0%,#edd4cb_100%)] px-4 py-2.5 text-sm font-black text-[#5a3025]"
-      >
-        Entrar como admin
-      </button>
-      {error ? (
-        <p className="text-xs font-semibold text-[#a13d2f]">{error}</p>
-      ) : null}
-    </form>
-  );
+  if (data?.rol === "admin" || data?.rol === "gestoria") {
+    return { ok: true, rol: data.rol };
+  }
+
+  return {
+    ok: false,
+    error: "Esta cuenta no tiene un perfil autorizado. No se ha cargado ningún dato.",
+  };
 }
 
 function PantallaRutaBloqueada() {
-  const pathname = usePathname();
-
   return (
     <section className="flex h-full min-h-0 items-center justify-center px-6 py-8">
       <div className="w-full max-w-2xl rounded-[30px] border border-[#dbc5bc] bg-[linear-gradient(180deg,#fffaf8_0%,#f4ece8_100%)] p-8 text-[#402a24] shadow-[0_24px_60px_rgba(85,52,46,0.10)]">
@@ -182,118 +134,174 @@ function PantallaRutaBloqueada() {
           Acceso restringido
         </div>
         <h1 className="mt-3 text-center text-3xl font-black tracking-tight">
-          Esta zona es solo para admin
+          Esta zona no está disponible para Gestoría
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-center text-sm leading-6 text-[#6d5249]">
-          Con perfil de gestoría puedes consultar la operativa permitida y todos
-          los maestros, pero esta pantalla queda bloqueada.
+          Puedes consultar las facturas autorizadas y los maestros. El resto de la
+          aplicación queda fuera de este acceso.
         </p>
-
-        <div className="mt-6 rounded-[24px] border border-[#e4d1ca] bg-white/70 p-5">
-          <FormularioAccesoAdmin />
-        </div>
-
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/facturas-recibidas"
             className="rounded-2xl border border-[#d4b8ad] bg-white px-4 py-2 text-sm font-bold text-[#5c4038]"
           >
-            Ir a operativa
+            Ir a facturas
           </Link>
           <Link
-            href="/maestros/varios"
+            href="/maestros/proveedores"
             className="rounded-2xl border border-[#d4b8ad] bg-white px-4 py-2 text-sm font-bold text-[#5c4038]"
           >
             Ir a maestros
           </Link>
         </div>
-
-        <p className="mt-5 text-center text-xs text-[#8b6c62]">
-          Ruta actual: {pathname}
-        </p>
       </div>
     </section>
   );
 }
 
-export function ProveedorAccesoApp({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const modo = useSyncExternalStore<ModoAcceso>(
-    suscribirAcceso,
-    leerModoAcceso,
-    () => "gestoria"
-  );
+export function ProveedorAccesoApp({ children }: { children: React.ReactNode }) {
+  const [fase, setFase] = useState<"cargando" | "anon" | "error" | "listo">("cargando");
+  const [rol, setRol] = useState<RolAcceso | null>(null);
+  const [correo, setCorreo] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState("");
+
+  const aplicarSesion = useCallback(async (session: { user: { id: string; email?: string } } | null) => {
+    if (!session) {
+      recordarRolSesion(null);
+      setRol(null);
+      setCorreo(null);
+      setMensaje("");
+      setFase("anon");
+      return;
+    }
+
+    const resultado = await leerRol(session.user.id);
+
+    if (!resultado.ok) {
+      recordarRolSesion(null);
+      setRol(null);
+      setCorreo(session.user.email ?? null);
+      setMensaje(resultado.error);
+      setFase(resultado.error ? "error" : "anon");
+
+      if (!resultado.error) {
+        await supabase.auth.signOut();
+      }
+
+      return;
+    }
+
+    recordarRolSesion(resultado.rol);
+    setRol(resultado.rol);
+    setCorreo(session.user.email ?? null);
+    setMensaje("");
+    setFase("listo");
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.removeItem(CLAVE_ACCESO_ANTIGUA);
+    let activo = true;
+
+    void supabase.auth.getUser().then(async ({ data, error }) => {
+      if (!activo) {
+        return;
+      }
+
+      if (error || !data.user) {
+        await aplicarSesion(null);
+        return;
+      }
+
+      const { data: sesion } = await supabase.auth.getSession();
+
+      if (activo) {
+        await aplicarSesion(sesion.session);
+      }
+    });
+
+    const { data: suscripcion } = supabase.auth.onAuthStateChange((_evento, session) => {
+      if (!activo) {
+        return;
+      }
+
+      setTimeout(() => {
+        if (activo) {
+          void aplicarSesion(session);
+        }
+      }, 0);
+    });
+
+    return () => {
+      activo = false;
+      suscripcion.subscription.unsubscribe();
+    };
+  }, [aplicarSesion]);
+
+  const cerrarSesion = useCallback(async () => {
+    recordarRolSesion(null);
+    setRol(null);
+    setCorreo(null);
+    setMensaje("");
+    setFase("anon");
+    await supabase.auth.signOut();
+  }, []);
 
   const value = useMemo<AccesoAppContextValue>(
     () => ({
-      modo,
-      esAdmin: modo === "admin",
-      esGestoria: modo === "gestoria",
-      activarAdmin: (clave) => {
-        if (clave !== CLAVE_ADMIN) {
-          return false;
-        }
-
-        window.localStorage.setItem(STORAGE_KEY, "admin");
-        notificarCambioAcceso();
-        return true;
-      },
-      salirAdmin: () => {
-        window.localStorage.setItem(STORAGE_KEY, "gestoria");
-        notificarCambioAcceso();
-      },
+      listo: fase !== "cargando",
+      sesionIniciada: fase === "listo",
+      esAdmin: rol === "admin",
+      esGestoria: rol === "gestoria",
+      correo,
+      mensaje,
+      cerrarSesion,
     }),
-    [modo]
+    [cerrarSesion, correo, fase, mensaje, rol]
   );
 
-  return (
-    <AccesoAppContext.Provider value={value}>
-      {children}
-    </AccesoAppContext.Provider>
-  );
+  return <AccesoAppContext.Provider value={value}>{children}</AccesoAppContext.Provider>;
 }
 
 export function useAccesoApp() {
-  const context = useContext(AccesoAppContext);
+  const acceso = useContext(AccesoAppContext);
 
-  if (!context) {
+  if (!acceso) {
     throw new Error("useAccesoApp debe usarse dentro de ProveedorAccesoApp.");
   }
 
-  return context;
+  return acceso;
 }
 
-export function MarcoContenidoApp({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function MarcoContenidoApp({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const acceso = useAccesoApp();
   const bloqueada = acceso.esGestoria && !esRutaPermitidaGestoria(pathname);
   const gestoriaActiva = acceso.esGestoria && esRutaPermitidaGestoria(pathname);
 
-  function bloquearSubmitGestoria(e: React.FormEvent<HTMLDivElement>) {
+  useEffect(() => {
+    if (!acceso.sesionIniciada) {
+      return;
+    }
+
+    if (pathname === "/login") {
+      router.replace(acceso.esGestoria ? "/facturas-recibidas" : "/");
+      return;
+    }
+
+    if (acceso.esGestoria && !esRutaPermitidaGestoria(pathname)) {
+      router.replace("/facturas-recibidas");
+    }
+  }, [acceso.esGestoria, acceso.sesionIniciada, pathname, router]);
+
+  function bloquearClicksGestoria(event: React.MouseEvent<HTMLDivElement>) {
     if (!gestoriaActiva) {
       return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-  }
+    const button = (event.target as HTMLElement | null)?.closest("button");
 
-  function bloquearClicksGestoria(e: React.MouseEvent<HTMLDivElement>) {
-    if (!gestoriaActiva) {
-      return;
-    }
-
-    const target = e.target as HTMLElement | null;
-    const button = target?.closest("button");
-
-    if (!button) {
+    if (!(button instanceof HTMLButtonElement)) {
       return;
     }
 
@@ -301,16 +309,59 @@ export function MarcoContenidoApp({
       return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
+    event.preventDefault();
+    event.stopPropagation();
   }
 
-  if (bloqueada) {
+  function bloquearSubmitGestoria(event: React.FormEvent<HTMLDivElement>) {
+    if (!gestoriaActiva) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!acceso.listo) {
     return (
       <main className="app-main">
-        <div className="page-body">
-          <PantallaRutaBloqueada />
-        </div>
+        <p className="px-6 py-10 text-center text-sm font-semibold text-[#6d5249]">
+          Comprobando el acceso...
+        </p>
+      </main>
+    );
+  }
+
+  if (acceso.sesionIniciada && pathname === "/login") {
+    return (
+      <main className="app-main">
+        <p className="px-6 py-10 text-center text-sm font-semibold text-[#6d5249]">
+          Entrando...
+        </p>
+      </main>
+    );
+  }
+
+  if (!acceso.sesionIniciada) {
+    return (
+      <main className="app-main">
+        {acceso.mensaje ? (
+          <section className="mx-auto flex min-h-[70vh] max-w-xl items-center px-6 py-10">
+            <div className="w-full rounded-[30px] border border-[#dbc5bc] bg-white p-8 text-center text-[#402a24]">
+              <h1 className="text-2xl font-black">Acceso no disponible</h1>
+              <p className="mt-3 text-sm leading-6">{acceso.mensaje}</p>
+              <button
+                type="button"
+                onClick={() => void acceso.cerrarSesion()}
+                className="mt-6 rounded-2xl border border-[#b9796d] px-4 py-2 text-sm font-bold"
+              >
+                Volver
+              </button>
+            </div>
+          </section>
+        ) : (
+          <PantallaLogin />
+        )}
       </main>
     );
   }
@@ -323,7 +374,7 @@ export function MarcoContenidoApp({
         onClickCapture={bloquearClicksGestoria}
         onSubmitCapture={bloquearSubmitGestoria}
       >
-        {children}
+        {bloqueada ? <PantallaRutaBloqueada /> : children}
       </div>
     </main>
   );
@@ -338,28 +389,20 @@ export function ResumenAccesoMenu() {
         Acceso
       </div>
       <div className="mt-2 rounded-xl border border-[#5e4638] bg-[linear-gradient(180deg,#3a2b23_0%,#2b2019_100%)] px-3 py-2 text-center text-sm font-bold text-[#f3e6d7]">
-        {acceso.esAdmin ? "Admin" : "Gestoria"}
+        {acceso.esAdmin ? "Administrador" : "Gestoría"}
       </div>
-
-      {acceso.esAdmin ? (
-        <button
-          type="button"
-          onClick={acceso.salirAdmin}
-          className="mt-2 w-full rounded-xl border border-[#6e5647] bg-transparent px-3 py-2 text-sm font-bold text-[#ead6c0] transition hover:bg-[rgba(255,244,226,0.06)]"
-        >
-          Salir de admin
-        </button>
-      ) : (
-        <div className="mt-2 grid gap-2">
-          <Link
-            href="/"
-            className="w-full rounded-xl border border-[#6e5647] px-3 py-2 text-center text-sm font-bold text-[#ead6c0] transition hover:bg-[rgba(255,244,226,0.06)]"
-          >
-            Acceso admin
-          </Link>
-          <FormularioAccesoAdmin compacto />
-        </div>
-      )}
+      {acceso.correo ? (
+        <p className="mt-2 break-all px-1 text-center text-[11px] leading-4 text-[#c7ae8d]">
+          {acceso.correo}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => void acceso.cerrarSesion()}
+        className="mt-2 w-full rounded-xl border border-[#6e5647] bg-transparent px-3 py-2 text-sm font-bold text-[#ead6c0] transition hover:bg-[rgba(255,244,226,0.06)]"
+      >
+        Cerrar sesión
+      </button>
     </div>
   );
 }

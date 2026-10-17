@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 function parseDecimal(value: string) {
   return Number(value.replace(",", ".").trim()) || 0;
@@ -13,6 +13,7 @@ function round2(value: number) {
 }
 
 export async function actualizarHora(formData: FormData) {
+  const supabase = await crearSupabaseServidor();
   const id = Number(formData.get("id"));
   const empleadoId = Number(formData.get("empleadoId"));
   const empresaId = Number(formData.get("empresaId"));

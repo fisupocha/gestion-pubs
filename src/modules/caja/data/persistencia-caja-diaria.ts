@@ -1,4 +1,7 @@
+"use client";
+
 import { supabase } from "@/lib/supabase";
+import { exigirAdministrador } from "@/modules/auth/exigir-administrador";
 
 export type RegistroCajaDiaria = {
   fecha: string;
@@ -97,6 +100,7 @@ export async function listarCajaDiariaPersistida(fechaDesde: string, fechaHasta:
 }
 
 export async function guardarCajaDiariaPersistida(registros: RegistroCajaDiaria[]) {
+  await exigirAdministrador();
   const hayDesgloseCue = registros.some(
     (item) =>
       item.cueTaquillaParte1.trim() ||

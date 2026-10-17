@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { CampoFecha } from "@/components/ui/campo-fecha";
-import { prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
+import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -504,8 +504,10 @@ export function PantallaAlquileres({
       return;
     }
 
+    let gestionAdjunto: Awaited<ReturnType<typeof prepararGuardadoAdjuntoOperativa>> | null = null;
+    let guardadoEnBase = false;
     try {
-      const gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
+      gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
         modulo: "alquileres",
         actual: archivoAdjunto,
         anterior: modoNuevo ? null : (registros[indiceActual]?.adjunto ?? null),
@@ -530,6 +532,7 @@ export function PantallaAlquileres({
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
+      guardadoEnBase = true;
       await gestionAdjunto.confirmar();
 
       const siguientes = modoNuevo
@@ -548,8 +551,15 @@ export function PantallaAlquileres({
       setFormulario(formularioDesdeRegistro(registroGuardado));
       setArchivoAdjunto(registroGuardado.adjunto);
       setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(registroGuardado), registroGuardado.adjunto));
-    } catch {
-      window.alert("No se pudo guardar el alquiler en BBDD.");
+    } catch (error) {
+      if (!guardadoEnBase) {
+        await gestionAdjunto?.cancelar();
+      }
+      const mensaje =
+        error instanceof Error && error.message.startsWith("La sesión")
+          ? error.message
+          : "No se pudo guardar el alquiler en BBDD.";
+      window.alert(mensaje);
     }
   }
 
@@ -576,12 +586,12 @@ export function PantallaAlquileres({
     });
   }
 
-  function abrirAdjuntoTemporal() {
+  async function abrirAdjuntoTemporal() {
     if (!archivoAdjunto?.url) {
       return;
     }
 
-    window.open(archivoAdjunto.url, "_blank", "noopener,noreferrer");
+    await abrirAdjuntoOperativa(archivoAdjunto.url);
   }
 
   function quitarAdjunto() {

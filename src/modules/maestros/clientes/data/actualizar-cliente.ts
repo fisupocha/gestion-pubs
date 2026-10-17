@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 
 export async function actualizarCliente(formData: FormData) {
+  const supabase = await crearSupabaseServidor();
   const id = Number(formData.get("id"));
   const nombre = formData.get("nombre")?.toString().trim() ?? "";
   const cif = formData.get("cif")?.toString().trim().toUpperCase() ?? "";

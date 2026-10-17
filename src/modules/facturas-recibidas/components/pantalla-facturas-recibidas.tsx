@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { leerFacturaAdjunta } from "@/lib/facturas/lector-adjunto";
-import { prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
+import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -561,8 +561,10 @@ export function PantallaFacturasRecibidas({
       return;
     }
 
+    let gestionAdjunto: Awaited<ReturnType<typeof prepararGuardadoAdjuntoOperativa>> | null = null;
+    let guardadoEnBase = false;
     try {
-      const gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
+      gestionAdjunto = await prepararGuardadoAdjuntoOperativa({
         modulo: "facturas-recibidas",
         actual: archivoAdjunto,
         anterior: modoNuevo ? null : (registros[indiceActual]?.adjunto ?? null),
@@ -584,6 +586,7 @@ export function PantallaFacturasRecibidas({
         adjunto: gestionAdjunto.adjuntoPersistido,
       };
 
+      guardadoEnBase = true;
       await gestionAdjunto.confirmar();
 
       const siguientes = modoNuevo
@@ -602,8 +605,15 @@ export function PantallaFacturasRecibidas({
       setFormulario(formularioDesdeRegistro(registroGuardado));
       setArchivoAdjunto(registroGuardado.adjunto);
       setSnapshotInicial(crearSnapshot(formularioDesdeRegistro(registroGuardado), registroGuardado.adjunto));
-    } catch {
-      window.alert("No se pudo guardar la factura recibida en BBDD.");
+    } catch (error) {
+      if (!guardadoEnBase) {
+        await gestionAdjunto?.cancelar();
+      }
+      const mensaje =
+        error instanceof Error && error.message.startsWith("La sesión")
+          ? error.message
+          : "No se pudo guardar la factura recibida en BBDD.";
+      window.alert(mensaje);
     }
   }
 
@@ -632,12 +642,12 @@ export function PantallaFacturasRecibidas({
     });
   }
 
-  function abrirAdjuntoTemporal() {
+  async function abrirAdjuntoTemporal() {
     if (!archivoAdjunto?.url) {
       return;
     }
 
-    window.open(archivoAdjunto.url, "_blank", "noopener,noreferrer");
+    await abrirAdjuntoOperativa(archivoAdjunto.url);
   }
 
   function quitarAdjunto() {
