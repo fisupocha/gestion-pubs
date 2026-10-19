@@ -1,390 +1,738 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { formatearImporte } from "@/modules/punteo-banco/celdas";
+import { calcularCoberturaExtracto } from "@/modules/punteo-banco/cobertura-extracto";
+import {
+  ANIO_INICIAL_PUNTEO,
+  ANIOS_PUNTEO,
+  BANCOS_PUNTEO,
+  type BancoPunteoId,
+  type EstadoOk,
+  type OrdenOk,
+  formatearFechaIso,
+  nombreBanco,
+  ordenarMovimientos,
+} from "@/modules/punteo-banco/modelo";
+import { requiereConfirmacionManual, textoConfirmacionManual } from "@/modules/punteo-banco/decision-estado";
+import { esVisibleEnTabla, type PeriodoBanco } from "@/modules/punteo-banco/movimiento-interno";
+import { conexionPunteoActiva } from "@/modules/punteo-banco/conexion-punteo";
+import { referenciaVigente } from "@/modules/punteo-banco/referencias-iniciales";
+import { presentarTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
+import { resumirTpvAnual } from "@/modules/punteo-banco/resumen-tpv-calculo";
+import {
+  botonCompacto,
+  botonCompactoPrimario,
+  botonPestana,
+  botonPestanaActiva,
+  botonPestanaInactiva,
+} from "./clases";
+import { DialogoCambios } from "./dialogo-cambios";
+import { DialogoConfirmarImportacion } from "./dialogo-confirmar-importacion";
+import { DialogoCorreccionEstado } from "./dialogo-correccion-estado";
+import { DialogoImportacionOficial } from "./dialogo-importacion-oficial";
+import { DialogoMotivoOficial } from "./dialogo-motivo-oficial";
+import { ReferenciaRegistrada } from "./referencia-registrada";
+import { SeparacionBorrador } from "./separacion-borrador";
+import { ResumenTpv } from "./resumen-tpv";
+import { RevisionConjunta } from "./revision-conjunta";
+import { TablaMovimientos } from "./tabla-movimientos";
+import { useArchivadorPunteo, type AvisoPunteo } from "./use-archivador-punteo";
+import { useModoOficial } from "./use-modo-oficial";
 
-type EstadoOk = "Pendiente" | "OK";
+type VistaPunteo = "banco" | "revision";
 
-type MovimientoBanco = {
-  id: string;
-  fecha: string;
-  fechaValor: string;
-  movimiento: string;
-  masDatos: string;
-  importe: string;
-  proveedor: string;
-  numFactura: string;
-  observaciones: string;
-  ok: EstadoOk;
-};
+type AccionNavegacion =
+  | { tipo: "banco"; banco: BancoPunteoId }
+  | { tipo: "anio"; anio: number }
+  | { tipo: "revision" }
+  | { tipo: "cerrar" }
+  | { tipo: "historial" };
 
-function normalizarClaveCabecera(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "")
-    .toLowerCase()
-    .trim();
-}
+const MENSAJE_GUARDADO =
+  "Punteo conservado en este navegador. No se ha escrito ningún registro en la base de datos.";
 
-function excelSerialAFecha(value: number) {
-  const base = new Date(Date.UTC(1899, 11, 30));
-  const fecha = new Date(base.getTime() + value * 86400000);
-  const dd = String(fecha.getUTCDate()).padStart(2, "0");
-  const mm = String(fecha.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = String(fecha.getUTCFullYear());
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-function fechaDesdeCelda(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return excelSerialAFecha(value);
+function textoLineaExtracto(cobertura: {
+  ultimoDiaCubierto: string | null;
+  proximoPeriodoPendiente: { desde: string; hasta: string | null } | null;
+}) {
+  if (!cobertura.ultimoDiaCubierto || !cobertura.proximoPeriodoPendiente) {
+    return "Sin periodo de extracto confirmado.";
   }
 
-  if (typeof value === "string") {
-    return value.trim();
-  }
+  const ultimo = formatearFechaIso(cobertura.ultimoDiaCubierto);
+  const desde = formatearFechaIso(cobertura.proximoPeriodoPendiente.desde);
+  const hasta = cobertura.proximoPeriodoPendiente.hasta
+    ? ` hasta ${formatearFechaIso(cobertura.proximoPeriodoPendiente.hasta)}`
+    : "";
 
-  return "";
+  return `Último día cubierto: ${ultimo} · Próximo extracto: desde ${desde}${hasta}`;
 }
 
-function importeDesdeCelda(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value.toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+function textoAccion(accion: AccionNavegacion) {
+  switch (accion.tipo) {
+    case "banco":
+      return `cambiar a ${nombreBanco(accion.banco)}`;
+    case "anio":
+      return `cambiar al año ${accion.anio}`;
+    case "revision":
+      return "abrir la revisión conjunta";
+    case "cerrar":
+      return "cerrar Punteo banco";
+    case "historial":
+      return "salir de esta pantalla";
   }
-
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  return "";
 }
 
-function textoDesdeCelda(value: unknown) {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  return String(value).trim();
+function hoyLocal() {
+  const fecha = new Date();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${fecha.getFullYear()}-${mes}-${dia}`;
 }
 
-function extraerCampo(row: Record<string, unknown>, aliases: string[]) {
-  const map = new Map<string, unknown>();
+function recortarAlAnio(periodos: PeriodoBanco[], banco: BancoPunteoId, anio: number) {
+  const inicio = `${anio}-01-01`;
+  const fin = `${anio}-12-31`;
 
-  Object.entries(row).forEach(([key, value]) => {
-    map.set(normalizarClaveCabecera(key), value);
-  });
-
-  for (const alias of aliases) {
-    const encontrado = map.get(normalizarClaveCabecera(alias));
-    if (encontrado !== undefined) {
-      return encontrado;
-    }
-  }
-
-  return "";
-}
-
-function encontrarFilaCabecera(rows: unknown[][]) {
-  return rows.findIndex((row) => {
-    if (!Array.isArray(row)) {
-      return false;
-    }
-
-    const normalizados = row.map((item) => normalizarClaveCabecera(String(item ?? "")));
-
-    return (
-      normalizados.includes("fecha") &&
-      normalizados.includes("movimiento") &&
-      normalizados.includes("importe")
-    );
-  });
-}
-
-function construirMovimientos(rows: Record<string, unknown>[]) {
-  return rows
-    .map((row, index) => {
-      const fecha = fechaDesdeCelda(extraerCampo(row, ["Fecha"]));
-      const movimiento = textoDesdeCelda(extraerCampo(row, ["Movimiento", "Concepto"]));
-      const importe = importeDesdeCelda(extraerCampo(row, ["Importe"]));
-
-      if (!fecha && !movimiento && !importe) {
-        return null;
-      }
-
-      return {
-        id: `mov-${index}`,
-        fecha,
-        fechaValor: fechaDesdeCelda(extraerCampo(row, ["Fecha valor", "FechaValor"])),
-        movimiento,
-        masDatos: textoDesdeCelda(extraerCampo(row, ["Mas datos", "Más datos", "Detalles"])),
-        importe,
-        proveedor: "",
-        numFactura: "",
-        observaciones: "",
-        ok: "Pendiente" as EstadoOk,
-      };
-    })
-    .filter((item): item is MovimientoBanco => item !== null);
+  return periodos
+    .filter((periodo) => periodo.banco === banco && periodo.hasta >= inicio && periodo.desde <= fin)
+    .map((periodo) => ({
+      desde: periodo.desde < inicio ? inicio : periodo.desde,
+      hasta: periodo.hasta > fin ? fin : periodo.hasta,
+    }));
 }
 
 export function PunteoBancoClient() {
   const router = useRouter();
-  const [nombreArchivo, setNombreArchivo] = useState("");
-  const [movimientos, setMovimientos] = useState<MovimientoBanco[]>([]);
-  const [mensaje, setMensaje] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const [bancoId, setBancoId] = useState<BancoPunteoId>("caixabank");
+  const [anio, setAnio] = useState(ANIO_INICIAL_PUNTEO);
+  const [vista, setVista] = useState<VistaPunteo>("banco");
+  const [orden, setOrden] = useState<OrdenOk>("original");
+  const [correccion, setCorreccion] = useState<{ id: string; estado: EstadoOk; motivo: string } | null>(null);
+  const [accionPendiente, setAccionPendiente] = useState<AccionNavegacion | null>(null);
+  const [navegacionNota, setNavegacionNota] = useState<AccionNavegacion | { tipo: "pagina"; pagina: number } | null>(
+    null
+  );
+  const [aviso, setAviso] = useState<AvisoPunteo | null>(null);
+  const omitirPopstate = useRef(0);
+  const archivadorPunteo = useArchivadorPunteo();
+  const {
+    archivador,
+    listo,
+    hayCambios,
+    paso,
+    guardar,
+    descartar,
+    actualizarMovimiento,
+    corregirEstadoConfirmado,
+    importarArchivo,
+    confirmarImportacion,
+    cancelarImportacion,
+    textoGastoMes,
+  } = archivadorPunteo;
+  const modo = useModoOficial(bancoId, anio);
+  const hoy = useMemo(() => hoyLocal(), []);
+  const bancoNombre = nombreBanco(bancoId);
 
-  const totales = useMemo(() => {
-    const ok = movimientos.filter((item) => item.ok === "OK").length;
-    return {
-      total: movimientos.length,
-      ok,
-      pendientes: movimientos.length - ok,
-    };
-  }, [movimientos]);
-
-  async function importarExcel(file: File) {
-    setError(null);
-    setMensaje(null);
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, {
-        type: "array",
-        cellDates: false,
-        raw: true,
-      });
-
-      const primeraHoja = workbook.SheetNames[0];
-
-      if (!primeraHoja) {
-        throw new Error("El Excel no tiene hojas.");
-      }
-
-      const worksheet = workbook.Sheets[primeraHoja];
-      const vistaCruda = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-        defval: "",
-        header: 1,
-      });
-      const filaCabecera = encontrarFilaCabecera(vistaCruda);
-
-      if (filaCabecera < 0) {
-        throw new Error("No he encontrado la cabecera del extracto.");
-      }
-
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
-        defval: "",
-        range: filaCabecera,
-      });
-      const nuevos = construirMovimientos(rows);
-
-      setMovimientos(nuevos);
-      setNombreArchivo(file.name);
-      setMensaje(
-        nuevos.length > 0
-          ? `Importados ${nuevos.length} movimientos del Excel.`
-          : "El Excel se ha leido, pero no he encontrado movimientos utiles."
-      );
-    } catch {
-      setError("No se pudo leer el Excel. Revisa que el fichero sea el bancario correcto.");
-      setMovimientos([]);
-      setNombreArchivo("");
+  const cobertura = useMemo(
+    () =>
+      calcularCoberturaExtracto(
+        recortarAlAnio(archivador.periodos, bancoId, anio),
+        recortarAlAnio(archivador.huecos, bancoId, anio)
+      ),
+    [archivador.huecos, archivador.periodos, anio, bancoId]
+  );
+  const movimientosVisibles = useMemo(() => {
+    if (conexionPunteoActiva()) {
+      return ordenarMovimientos(modo.movimientos, orden);
     }
-  }
 
-  function actualizarMovimiento(
-    id: string,
-    campo: "proveedor" | "numFactura" | "observaciones" | "ok",
-    value: string
-  ) {
-    setMovimientos((actual) =>
-      actual.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              [campo]: campo === "ok" ? (value as EstadoOk) : value,
-            }
-          : item
+    const delAnio = archivador.movimientos
+      .filter(
+        (movimiento) =>
+          movimiento.banco === bancoId &&
+          movimiento.fecha.startsWith(`${anio}-`) &&
+          esVisibleEnTabla(movimiento.clase)
       )
-    );
-  }
+      .map((movimiento) => ({
+        id: movimiento.id,
+        fecha: movimiento.fecha,
+        fechaValor: movimiento.fechaValor,
+        importe: formatearImporte(movimiento.importe),
+        concepto: movimiento.concepto,
+        observaciones: movimiento.observaciones,
+        ok: movimiento.ok,
+        orden: movimiento.orden,
+      }));
 
-  function cerrarPantalla() {
-    if (typeof window !== "undefined") {
-      window.close();
-    }
+    return ordenarMovimientos(delAnio, orden);
+  }, [anio, archivador.movimientos, bancoId, modo.movimientos, orden]);
+  const filasTpv = useMemo(
+    () =>
+      conexionPunteoActiva()
+        ? presentarTpvOficial(modo.meses)
+        : resumirTpvAnual({
+        banco: bancoId,
+        anio,
+        movimientos: archivador.movimientos,
+        periodos: archivador.periodos,
+        huecos: archivador.huecos,
+        hoy,
+        gastosRegistrados: archivador.gastosRegistrados,
+        hayHistorico:
+          archivador.movimientos.some((movimiento) => movimiento.banco === bancoId) ||
+          archivador.periodos.some((periodo) => periodo.banco === bancoId) ||
+          archivador.huecos.some((hueco) => hueco.banco === bancoId),
+      }),
+    [anio, archivador, bancoId, hoy, modo.meses]
+  );
 
-    setTimeout(() => {
+  const cerrarPantalla = useCallback(() => {
+    window.close();
+    window.setTimeout(() => {
       router.push("/gestion-diaria/empleados");
     }, 80);
+  }, [router]);
+
+  const aplicarAccion = useCallback(
+    (accion: AccionNavegacion) => {
+      if (accion.tipo === "banco") {
+        setVista("banco");
+        setBancoId(accion.banco);
+        setOrden("original");
+        return;
+      }
+
+      if (accion.tipo === "anio") {
+        setAnio(accion.anio);
+        setOrden("original");
+        return;
+      }
+
+      if (accion.tipo === "revision") {
+        setVista("revision");
+        return;
+      }
+
+      if (accion.tipo === "cerrar") {
+        cerrarPantalla();
+        return;
+      }
+
+      omitirPopstate.current = 2;
+      window.history.go(-2);
+    },
+    [cerrarPantalla]
+  );
+
+  const solicitar = useCallback(
+    (accion: AccionNavegacion) => {
+      if (
+        (accion.tipo === "banco" && accion.banco === bancoId && vista === "banco") ||
+        (accion.tipo === "anio" && accion.anio === anio) ||
+        (accion.tipo === "revision" && vista === "revision")
+      ) {
+        return;
+      }
+
+      if (conexionPunteoActiva() && modo.hayNotasPendientes) {
+        setNavegacionNota(accion);
+        return;
+      }
+
+      if (!hayCambios) {
+        aplicarAccion(accion);
+        return;
+      }
+
+      setAccionPendiente(accion);
+    },
+    [anio, aplicarAccion, bancoId, hayCambios, modo.hayNotasPendientes, vista]
+  );
+
+  const guardarEnPantalla = useCallback(() => {
+    if (!hayCambios) {
+      return;
+    }
+
+    guardar();
+    setAviso({ tono: "ok", texto: MENSAJE_GUARDADO });
+  }, [guardar, hayCambios]);
+
+  const guardarYSeguir = useCallback(() => {
+    const accion = accionPendiente;
+    guardar();
+    setAccionPendiente(null);
+
+    if (accion) {
+      aplicarAccion(accion);
+    }
+
+    setAviso({ tono: "ok", texto: MENSAJE_GUARDADO });
+  }, [accionPendiente, aplicarAccion, guardar]);
+
+  const descartarYSeguir = useCallback(() => {
+    const accion = accionPendiente;
+    descartar();
+    setAccionPendiente(null);
+
+    if (accion) {
+      aplicarAccion(accion);
+    }
+  }, [accionPendiente, aplicarAccion, descartar]);
+
+  const cancelarNavegacion = useCallback(() => {
+    setAccionPendiente(null);
+  }, []);
+
+  const publicar = useCallback((resultado: AvisoPunteo | null) => {
+    if (resultado) {
+      setAviso(resultado);
+    }
+  }, []);
+  const alCancelarImportacion = useCallback(() => {
+    publicar(cancelarImportacion());
+  }, [cancelarImportacion, publicar]);
+  const alConfirmarImportacion = useCallback(() => {
+    publicar(confirmarImportacion());
+  }, [confirmarImportacion, publicar]);
+
+  useEffect(() => {
+    if (!hayCambios) {
+      return;
+    }
+
+    function avisarSalida(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    const estadoHistorial = window.history.state as { __punteoBancoGuard?: boolean } | null;
+
+    if (!estadoHistorial?.__punteoBancoGuard) {
+      window.history.pushState(
+        { ...(estadoHistorial ?? {}), __punteoBancoGuard: true },
+        "",
+        window.location.href
+      );
+    }
+
+    function avisarHistorial() {
+      if (omitirPopstate.current > 0) {
+        omitirPopstate.current -= 1;
+        return;
+      }
+
+      const estadoActualHistorial = window.history.state as { __punteoBancoGuard?: boolean } | null;
+      window.history.pushState(
+        { ...(estadoActualHistorial ?? {}), __punteoBancoGuard: true },
+        "",
+        window.location.href
+      );
+      setAccionPendiente({ tipo: "historial" });
+    }
+
+    window.addEventListener("beforeunload", avisarSalida);
+    window.addEventListener("popstate", avisarHistorial);
+
+    return () => {
+      window.removeEventListener("beforeunload", avisarSalida);
+      window.removeEventListener("popstate", avisarHistorial);
+    };
+  }, [hayCambios]);
+
+  async function alElegirArchivo(event: ChangeEvent<HTMLInputElement>) {
+    const archivo = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!archivo) {
+      setAviso({
+        tono: "error",
+        texto: "No se ha seleccionado ningún archivo. No se ha importado nada.",
+      });
+      return;
+    }
+
+    setAviso(null);
+
+    if (conexionPunteoActiva()) {
+      publicar(await modo.leerArchivo(archivo));
+      return;
+    }
+
+    try {
+      publicar(await importarArchivo(archivo, bancoId));
+    } catch {
+      setAviso({
+        tono: "error",
+        texto: "No se ha podido leer el archivo. No se ha importado nada.",
+      });
+    }
   }
 
-  return (
-    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3">
-      <header className="rounded-[20px] border border-[#d6c4b8] bg-[linear-gradient(180deg,#fffaf7_0%,#f1e8e2_100%)] px-4 py-3 text-[#3f2b24] shadow-[0_18px_40px_rgba(70,45,37,0.10)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8b695d]">
-              Gestion diaria
-            </div>
-            <h1 className="mt-1 text-2xl font-black">Punteo banco</h1>
-            <p className="mt-1 text-sm text-[#6a4f45]">
-              Importa el Excel bancario y completa las columnas de trabajo al final.
-            </p>
-          </div>
+  const lineaExtracto = textoLineaExtracto(cobertura);
+  const detalleCambios = accionPendiente
+    ? `Hay cambios sin guardar en ${bancoNombre}, año ${anio}. Puedes guardarlos en este navegador, descartarlos o cancelar y seguir aquí antes de ${textoAccion(accionPendiente)}.`
+    : "";
 
+  return (
+    <section className="flex h-full min-h-0 flex-col gap-1.5 overflow-auto p-2">
+      <header className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[14px] border border-[#d6c4b8] bg-[linear-gradient(180deg,#fffaf7_0%,#f1e8e2_100%)] px-2.5 py-1.5 text-[#3f2b24] shadow-[0_10px_24px_rgba(70,45,37,0.08)]">
+        <h1 className="text-lg font-black leading-none">Punteo banco</h1>
+
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Banco">
+          {BANCOS_PUNTEO.map((banco) => {
+            const activa = vista === "banco" && banco.id === bancoId;
+
+            return (
+              <button
+                key={banco.id}
+                type="button"
+                role="tab"
+                id={`pestana-${banco.id}`}
+                aria-selected={activa}
+                aria-controls="panel-punteo-banco"
+                className={`${botonPestana} ${activa ? botonPestanaActiva : botonPestanaInactiva}`}
+                onClick={() => solicitar({ tipo: "banco", banco: banco.id })}
+              >
+                {banco.nombre}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <label className="flex items-center gap-1.5 text-sm font-bold text-[#5d433a]">
+            Año
+            <select
+              aria-label="Año"
+              value={anio}
+              onChange={(event) =>
+                solicitar({ tipo: "anio", anio: Number(event.target.value) })
+              }
+              className="rounded-[10px] border border-[#d9c3b7] bg-white px-2 py-1 text-sm font-bold leading-none text-[#4b2f27] outline-none"
+            >
+              {ANIOS_PUNTEO.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input
+            ref={archivoRef}
+            type="file"
+            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            tabIndex={-1}
+            onChange={alElegirArchivo}
+          />
           <button
             type="button"
-            onClick={cerrarPantalla}
-            className="rounded-[14px] border border-[#d1b1a2] bg-[linear-gradient(180deg,#fff8f4_0%,#ecd9ce_100%)] px-4 py-2 text-sm font-bold text-[#4b2f27] shadow-[0_10px_20px_rgba(70,45,37,0.08)] transition hover:-translate-y-[1px]"
+            className={botonCompactoPrimario}
+            disabled={!listo}
+            onClick={() => archivoRef.current?.click()}
           >
+            Importar Excel
+          </button>
+          <button
+            type="button"
+            className={vista === "revision" ? botonCompactoPrimario : botonCompacto}
+            aria-pressed={vista === "revision"}
+            onClick={() => solicitar({ tipo: "revision" })}
+          >
+            Revisión conjunta
+          </button>
+          <button type="button" className={botonCompacto} onClick={() => solicitar({ tipo: "cerrar" })}>
             Cerrar
           </button>
         </div>
       </header>
 
-      <section className="rounded-[18px] border border-[#d6c4b8] bg-[linear-gradient(180deg,#fffaf7_0%,#f3ebe6_100%)] px-4 py-3 shadow-[0_12px_24px_rgba(70,45,37,0.08)]">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-end">
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#8b695d]">
-              Excel bancario
-            </span>
-            <input
-              type="file"
-              accept=".xls,.xlsx,.xlsm"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  void importarExcel(file);
-                }
-              }}
-              className="rounded-[12px] border border-[#d9c3b7] bg-white px-3 py-2 text-sm text-[#4b2f27] file:mr-3 file:rounded-[10px] file:border-0 file:bg-[#4b312b] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
+      {aviso ? (
+        <div
+          role="status"
+          className={
+            aviso.tono === "ok"
+              ? "rounded-[10px] border border-[#b7d3b4] bg-[#f3faf2] px-2.5 py-1 text-sm font-semibold leading-5 text-[#2f6a39]"
+              : aviso.tono === "error"
+                ? "rounded-[10px] border border-[#e3b2aa] bg-[#fdf3f1] px-2.5 py-1 text-sm font-semibold leading-5 text-[#7a3028]"
+                : "rounded-[10px] border border-[#e1cec4] bg-white/80 px-2.5 py-1 text-sm font-semibold leading-5 text-[#5d433a]"
+          }
+        >
+          {aviso.texto}
+        </div>
+      ) : null}
+
+      {vista === "revision" ? (
+        <RevisionConjunta />
+      ) : (
+        <div
+          id="panel-punteo-banco"
+          role="tabpanel"
+          aria-labelledby={`pestana-${bancoId}`}
+          className="flex min-h-0 flex-1 flex-col gap-1.5"
+        >
+          {conexionPunteoActiva() ? (
+            <SeparacionBorrador
+              banco={bancoId}
+              anio={anio}
+              borrador={archivador.movimientos
+                .filter((movimiento) => movimiento.banco === bancoId)
+                .map((movimiento) => ({
+                  id: movimiento.id,
+                  fecha: movimiento.fecha,
+                  concepto: movimiento.concepto,
+                  importe: formatearImporte(movimiento.importe),
+                  observaciones: movimiento.observaciones,
+                  ok: movimiento.ok,
+                }))}
             />
-          </label>
-
-          <div className="rounded-[14px] border border-[#d8c2b6] bg-white/75 px-3 py-2 text-center">
-            <div className="text-[9px] font-black uppercase tracking-[0.14em] text-[#8b695d]">
-              Total
+          ) : null}
+          {conexionPunteoActiva() && modo.errorLectura ? (
+            <div
+              role="alert"
+              className="rounded-[10px] border border-[#e3b2aa] bg-[#fdf3f1] px-2.5 py-1 text-sm font-semibold leading-5 text-[#7a3028]"
+            >
+              {modo.errorLectura}
             </div>
-            <div className="mt-1 text-xl font-black text-[#3f2b24]">{totales.total}</div>
-          </div>
-
-          <div className="rounded-[14px] border border-[#d8c2b6] bg-white/75 px-3 py-2 text-center">
-            <div className="text-[9px] font-black uppercase tracking-[0.14em] text-[#8b695d]">
-              OK
+          ) : null}
+          {conexionPunteoActiva() && modo.incertidumbre ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-[#e4d39a] bg-[#f8e8bc] px-2.5 py-1 text-sm font-semibold leading-5 text-[#6a5010]">
+              <span>Hay una confirmación sin resultado conocido.</span>
+              <button
+                type="button"
+                className={botonCompacto}
+                onClick={() => {
+                  void modo.comprobarIncertidumbre().then((resultado) => publicar(resultado));
+                }}
+              >
+                Comprobar si se guardó
+              </button>
             </div>
-            <div className="mt-1 text-xl font-black text-[#2f6a39]">{totales.ok}</div>
-          </div>
-
-          <div className="rounded-[14px] border border-[#d8c2b6] bg-white/75 px-3 py-2 text-center">
-            <div className="text-[9px] font-black uppercase tracking-[0.14em] text-[#8b695d]">
-              Pendientes
+          ) : null}
+          {conexionPunteoActiva() && modo.cargando ? (
+            <p className="px-0.5 text-sm font-semibold leading-5 text-[#5d433a]">Cargando movimientos oficiales…</p>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-0.5">
+            <p className="text-sm font-semibold leading-5 text-[#4b312b]">{lineaExtracto}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {hayCambios ? (
+                <span className="text-sm font-semibold leading-5 text-[#7a3d2c]">
+                  Hay cambios sin guardar.
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className={botonCompactoPrimario}
+                onClick={guardarEnPantalla}
+                disabled={conexionPunteoActiva() || !hayCambios}
+              >
+                Guardar
+              </button>
             </div>
-            <div className="mt-1 text-xl font-black text-[#7a3d2c]">{totales.pendientes}</div>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <div className="font-semibold text-[#5d433a]">
-            {nombreArchivo ? `Archivo: ${nombreArchivo}` : "Todavia no has importado ningun Excel."}
           </div>
 
-          {mensaje ? <div className="font-semibold text-[#2f6a39]">{mensaje}</div> : null}
-          {error ? <div className="font-semibold text-[#8a2f2c]">{error}</div> : null}
-        </div>
-      </section>
+          <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-1.5 min-[1280px]:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)] min-[1280px]:grid-rows-1">
+            <div className="flex min-h-0 min-w-0 flex-col gap-1.5">
+              <ReferenciaRegistrada
+                referencia={referenciaVigente(bancoId, archivador.referenciasConfirmadas)}
+              />
+              <div className="min-h-0 flex-1">
+                <TablaMovimientos
+                  banco={bancoNombre}
+                  anio={anio}
+                  movimientos={movimientosVisibles}
+                  orden={orden}
+                  onCambioOrden={setOrden}
+                  textoVacio={
+                    conexionPunteoActiva() && modo.errorLectura
+                      ? "No se muestran movimientos porque la lectura ha fallado."
+                      : undefined
+                  }
+                  marcas={conexionPunteoActiva() ? modo.marcas : undefined}
+                  onConfirmarObservacion={
+                    conexionPunteoActiva()
+                      ? (id, valor) => {
+                          void modo.confirmarObservacion(id, valor).then((resultado) => publicar(resultado));
+                        }
+                      : undefined
+                  }
+                  onCambio={(id, campo, valor) => {
+                    if (conexionPunteoActiva()) {
+                      modo.alCambiar(id, campo, valor);
+                      return;
+                    }
 
-      <section className="min-h-0 flex-1 overflow-hidden rounded-[18px] border border-[#d6c4b8] bg-[linear-gradient(180deg,#fffaf7_0%,#f3ebe6_100%)] shadow-[0_18px_36px_rgba(70,45,37,0.08)]">
-        <div className="border-b border-[#e1cec4] px-4 py-2">
-          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#8b695d]">
-            Tabla de apuntes bancarios
+                    if (campo === "ok") {
+                      const movimiento = archivador.movimientos.find((actual) => actual.id === id);
+                      const estado = valor as EstadoOk;
+
+                      if (movimiento && requiereConfirmacionManual(movimiento, estado)) {
+                        setCorreccion({
+                          id,
+                          estado,
+                          motivo: movimiento.incidenciaAbierta?.motivo ?? "",
+                        });
+                        return;
+                      }
+                    }
+
+                    actualizarMovimiento(id, campo, valor);
+                    setAviso(null);
+                  }}
+                />
+                {conexionPunteoActiva() ? (
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      className={botonCompacto}
+                      disabled={modo.pagina === 0}
+                      onClick={() => {
+                        const destino = Math.max(0, modo.pagina - 1);
+
+                        if (modo.hayNotasPendientes) {
+                          setNavegacionNota({ tipo: "pagina", pagina: destino });
+                          return;
+                        }
+
+                        modo.setPagina(destino);
+                      }}
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-sm font-semibold text-[#4b312b]">Página {modo.pagina + 1}</span>
+                    <button
+                      type="button"
+                      className={botonCompacto}
+                      disabled={!modo.hayMas}
+                      onClick={() => {
+                        const destino = modo.pagina + 1;
+
+                        if (modo.hayNotasPendientes) {
+                          setNavegacionNota({ tipo: "pagina", pagina: destino });
+                          return;
+                        }
+
+                        modo.setPagina(destino);
+                      }}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <ResumenTpv
+              anio={anio}
+              filas={filasTpv}
+              onGuardarMes={(mes) =>
+                publicar(conexionPunteoActiva() ? modo.avisarGasto(mes) : textoGastoMes(bancoId, anio, mes))
+              }
+            />
           </div>
         </div>
+      )}
 
-        <div className="h-full overflow-auto">
-          <table className="min-w-[1680px] table-fixed border-collapse">
-            <thead>
-              <tr className="sticky top-0 z-10 bg-[#f7ece7] text-[10px] font-black uppercase tracking-[0.08em] text-[#8b695d]">
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Fecha</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Fecha valor</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Movimiento</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Mas datos</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-right">Importe</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Proveedor</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Num factura</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">Observaciones</th>
-                <th className="border border-[#e4d3ca] px-2 py-2 text-left">OK</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movimientos.length > 0 ? (
-                movimientos.map((item) => (
-                  <tr key={item.id} className="bg-white/75 text-sm text-[#4b312b]">
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">{item.fecha}</td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">{item.fechaValor}</td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">{item.movimiento}</td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">{item.masDatos}</td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 text-right align-top font-semibold">
-                      {item.importe}
-                    </td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">
-                      <input
-                        value={item.proveedor}
-                        onChange={(e) =>
-                          actualizarMovimiento(item.id, "proveedor", e.target.value)
-                        }
-                        className="w-full rounded-[8px] border border-[#dac4b8] bg-white px-2 py-1.5 text-sm outline-none"
-                      />
-                    </td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">
-                      <input
-                        value={item.numFactura}
-                        onChange={(e) =>
-                          actualizarMovimiento(item.id, "numFactura", e.target.value)
-                        }
-                        className="w-full rounded-[8px] border border-[#dac4b8] bg-white px-2 py-1.5 text-sm outline-none"
-                      />
-                    </td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">
-                      <input
-                        value={item.observaciones}
-                        onChange={(e) =>
-                          actualizarMovimiento(item.id, "observaciones", e.target.value)
-                        }
-                        className="w-full rounded-[8px] border border-[#dac4b8] bg-white px-2 py-1.5 text-sm outline-none"
-                      />
-                    </td>
-                    <td className="border border-[#ecdbd5] px-2 py-2 align-top">
-                      <select
-                        value={item.ok}
-                        onChange={(e) => actualizarMovimiento(item.id, "ok", e.target.value)}
-                        className="w-full rounded-[8px] border border-[#dac4b8] bg-white px-2 py-1.5 text-sm font-semibold outline-none"
-                      >
-                        <option value="Pendiente">Pendiente</option>
-                        <option value="OK">OK</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="border border-[#ecdbd5] px-4 py-10 text-center text-sm font-semibold text-[#7b635c]"
-                  >
-                    Importa el Excel bancario para ver aqui la tabla de trabajo.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <DialogoCambios
+        abierto={accionPendiente !== null}
+        titulo="Cambios sin guardar"
+        detalle={detalleCambios}
+        onGuardar={guardarYSeguir}
+        onDescartar={descartarYSeguir}
+        onCancelar={cancelarNavegacion}
+      />
+      {conexionPunteoActiva() ? (
+        <DialogoCambios
+          abierto={navegacionNota !== null}
+          titulo="Observación sin guardar"
+          detalle="Hay un texto que todavía no está guardado en la base. Puedes guardarlo, continuar conservando el borrador en esta pantalla, o cancelar."
+          textoDescartar="Conservar y seguir"
+          onGuardar={() => {
+            void modo.guardarNotasPendientes().then((resultado) => {
+              publicar(resultado.aviso);
+
+              if (!resultado.todas || !navegacionNota) {
+                return;
+              }
+
+              const accion = navegacionNota;
+              setNavegacionNota(null);
+
+              if (accion.tipo === "pagina") {
+                modo.setPagina(accion.pagina);
+                return;
+              }
+
+              aplicarAccion(accion);
+            });
+          }}
+          onDescartar={() => {
+            const accion = navegacionNota;
+            setNavegacionNota(null);
+
+            if (!accion) {
+              return;
+            }
+
+            if (accion.tipo === "pagina") {
+              modo.setPagina(accion.pagina);
+              return;
+            }
+
+            aplicarAccion(accion);
+          }}
+          onCancelar={() => setNavegacionNota(null)}
+        />
+      ) : null}
+      <DialogoCorreccionEstado
+        abierto={correccion !== null}
+        detalle={correccion ? textoConfirmacionManual(correccion.estado) : ""}
+        motivo={correccion?.motivo ?? ""}
+        onConfirmar={() => {
+          if (!correccion) {
+            return;
+          }
+
+          corregirEstadoConfirmado(correccion.id, correccion.estado);
+          setCorreccion(null);
+          setAviso(null);
+        }}
+        onCancelar={() => setCorreccion(null)}
+      />
+      {paso?.tipo === "confirmar" && !conexionPunteoActiva() ? (
+        <DialogoConfirmarImportacion
+          banco={nombreBanco(paso.lectura.banco)}
+          referencia={paso.referencia}
+          plan={paso.plan}
+          onConfirmar={alConfirmarImportacion}
+          onCancelar={alCancelarImportacion}
+        />
+      ) : null}
+      {conexionPunteoActiva() && modo.preview ? (
+        <DialogoImportacionOficial
+          banco={bancoId}
+          nombre={modo.preview.nombre}
+          plan={modo.preview.plan}
+          enviando={modo.enviando}
+          onConfirmar={() => {
+            void modo.confirmarCarga().then((resultado) => publicar(resultado));
+          }}
+          onCancelar={() => publicar(modo.cancelarPreview())}
+        />
+      ) : null}
+      {conexionPunteoActiva() && modo.estadoPendiente ? (
+        <DialogoMotivoOficial
+          estado={modo.estadoPendiente.estado}
+          onConfirmar={(motivo) => {
+            void modo.confirmarEstado(motivo).then((resultado) => publicar(resultado));
+          }}
+          onCancelar={modo.cancelarEstado}
+        />
+      ) : null}
     </section>
   );
 }
