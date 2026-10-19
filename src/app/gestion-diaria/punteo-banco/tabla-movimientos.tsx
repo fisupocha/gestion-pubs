@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { EstadoOk, MovimientoPunteo, OrdenOk } from "@/modules/punteo-banco/modelo";
 import { tarjetaPunteo } from "./clases";
 
@@ -14,6 +14,7 @@ type TablaMovimientosProps = {
   onConfirmarObservacion?: (id: string, valor: string) => void;
   textoVacio?: string;
   marcas?: Record<string, "pendiente" | "error" | "conflicto">;
+  onLlegarAlFinal?: () => void;
 };
 
 const COLOR_ESTADO: Record<EstadoOk, string> = {
@@ -32,10 +33,39 @@ export function TablaMovimientos({
   onConfirmarObservacion,
   textoVacio,
   marcas,
+  onLlegarAlFinal,
 }: TablaMovimientosProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const finalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!onLlegarAlFinal) {
+      return;
+    }
+
+    const raiz = scrollRef.current;
+    const marca = finalRef.current;
+
+    if (!raiz || !marca) {
+      return;
+    }
+
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((entrada) => entrada.isIntersecting)) {
+          onLlegarAlFinal();
+        }
+      },
+      { root: raiz, rootMargin: "160px" }
+    );
+
+    observador.observe(marca);
+    return () => observador.disconnect();
+  }, [onLlegarAlFinal, movimientos.length]);
+
   return (
     <section className={`${tarjetaPunteo} flex h-full min-h-0 min-w-0 flex-col overflow-hidden`}>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[52rem] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[6.5rem]" />
@@ -143,6 +173,7 @@ export function TablaMovimientos({
             )}
           </tbody>
         </table>
+        {onLlegarAlFinal ? <div ref={finalRef} className="h-1" aria-hidden="true" /> : null}
       </div>
     </section>
   );

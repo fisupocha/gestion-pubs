@@ -7,7 +7,7 @@ import { conexionPunteoActiva } from "@/modules/punteo-banco/conexion-punteo";
 import { decidirConsulta, ejecutarCargaEnDosPartes, identificarExcel } from "@/modules/punteo-banco/importacion-doble";
 import { leerExtracto, type ResultadoLectura } from "@/modules/punteo-banco/leer-extracto";
 import type { BancoPunteoId, EstadoOk, MovimientoPunteo } from "@/modules/punteo-banco/modelo";
-import type { MovimientoOficial } from "@/modules/punteo-banco/acceso-oficial";
+import type { MovimientoOficial, UltimoMovimientoOficial } from "@/modules/punteo-banco/acceso-oficial";
 import {
   aplicarConflicto,
   aplicarObservacionFallida,
@@ -21,11 +21,12 @@ import {
   prepararGuardadoObservacion,
   type BorradorObservacion,
 } from "@/modules/punteo-banco/observacion-borrador";
+import { TAMANO_BLOQUE, unirBloque } from "@/modules/punteo-banco/bloques-lista";
 import { mesTpvUtilizable, type MesTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
 import { prepararCargaOficial, type PlanCargaOficial } from "@/modules/punteo-banco/preparar-carga-oficial";
 import type { AvisoPunteo } from "./use-archivador-punteo";
 
-const LIMITE = 100;
+const LIMITE = TAMANO_BLOQUE;
 
 export type PreviewOficial = {
   nombre: string;
@@ -45,9 +46,10 @@ export type IncertidumbreCarga = {
 
 export function useModoOficial(banco: BancoPunteoId, anio: number) {
   const activo = conexionPunteoActiva();
-  const [pagina, setPagina] = useState(0);
   const [filas, setFilas] = useState<MovimientoOficial[]>([]);
   const [hayMas, setHayMas] = useState(false);
+  const [ultimo, setUltimo] = useState<UltimoMovimientoOficial | null>(null);
+  const [cargandoUltimo, setCargandoUltimo] = useState(false);
   const [meses, setMeses] = useState<MesTpvOficial[]>([]);
   const [cargando, setCargando] = useState(false);
   const [errorLectura, setErrorLectura] = useState<string | null>(null);
@@ -61,6 +63,9 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
   const filasRef = useRef<MovimientoOficial[]>([]);
   const textosRef = useRef<Map<number, string>>(new Map());
   const borradoresRef = useRef<Map<number, BorradorObservacion>>(new Map());
+  const hayMasRef = useRef(false);
+  const cargandoRef = useRef(false);
+  const contextoRef = useRef({ banco, anio });
 
   useEffect(() => {
     filasRef.current = filas;
@@ -85,8 +90,8 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
   }, []);
 
   useEffect(() => {
-    setPagina(0);
-  }, [banco, anio]);
+    hayMasRef.current = hayMas;
+  }, [hayMas]);
 
   useEffect(() => {
     if (!conexionPunteoActiva()) {
@@ -94,6 +99,16 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     }
 
     let vivo = true;
+    const cambio = contextoRef.current.banco !== banco || contextoRef.current.anio !== anio;
+    contextoRef.current = { banco, anio };
+
+    if (cambio) {
+      setFilas([]);
+      setHayMas(false);
+      hayMasRef.current = false;
+    }
+
+    cargandoRef.current = true;
     setCargando(true);
     setErrorLectura(null);
 
@@ -102,7 +117,6 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
         const paginaDatos = await acceso.leerMovimientosAnio({
           banco,
           anio,
-          desde: pagina * LIMITE,
           limite: LIMITE,
         });
 
@@ -110,24 +124,15 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
           return;
         }
 
-        const siguientes = new Map(borradoresRef.current);
-
-        paginaDatos.filas.forEach((fila) => {
-          const nota = siguientes.get(fila.id);
-
-          if (nota) {
-            siguientes.set(
-              fila.id,
-              actualizarOficialDesdeServidor(nota, fila.observaciones, fila.estado, fila.decisionProtegida)
-            );
-          }
-        });
-
-        borradoresRef.current = siguientes;
-        setBorradores(siguientes);
-        setFilas(combinarFilasConBorradores(paginaDatos.filas, siguientes));
+        const siguientes = incorporarBorradores(paginaDatos.filas, borradoresRef.current);
+        borradoresRef.current = siguientes.borradores;
+        setBorradores(siguientes.borradores);
+        setFilas(siguientes.filas);
         setHayMas(paginaDatos.hayMas);
-        textosRef.current = new Map(paginaDatos.filas.map((fila) => [fila.id, fila.observaciones]));
+        hayMasRef.current = paginaDatos.hayMas;
+        paginaDatos.filas.forEach((fila) => {
+          textosRef.current.set(fila.id, fila.observaciones);
+        });
         setErrorLectura(null);
       })
       .catch((error: unknown) => {
@@ -135,22 +140,56 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
           return;
         }
 
-        setFilas([]);
-        setHayMas(false);
         setErrorLectura(
           error instanceof Error ? error.message : "No se han podido leer los movimientos oficiales."
         );
       })
       .finally(() => {
+        if (!vivo) {
+          return;
+        }
+
+        cargandoRef.current = false;
+        setCargando(false);
+      });
+
+    return () => {
+      vivo = false;
+    };
+  }, [anio, banco, recarga]);
+
+  useEffect(() => {
+    if (!conexionPunteoActiva()) {
+      return;
+    }
+
+    let vivo = true;
+    setCargandoUltimo(true);
+    setUltimo(null);
+
+    void import("@/modules/punteo-banco/acceso-oficial")
+      .then(async (acceso) => {
+        const movimiento = await acceso.leerUltimoMovimiento(banco);
+
         if (vivo) {
-          setCargando(false);
+          setUltimo(movimiento);
+        }
+      })
+      .catch(() => {
+        if (vivo) {
+          setUltimo(null);
+        }
+      })
+      .finally(() => {
+        if (vivo) {
+          setCargandoUltimo(false);
         }
       });
 
     return () => {
       vivo = false;
     };
-  }, [anio, banco, pagina, recarga]);
+  }, [banco, recarga]);
 
   useEffect(() => {
     if (!conexionPunteoActiva()) {
@@ -613,6 +652,59 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     [meses]
   );
 
+  const cargarMas = useCallback(async () => {
+    if (!conexionPunteoActiva() || cargandoRef.current || !hayMasRef.current) {
+      return;
+    }
+
+    const actuales = filasRef.current;
+
+    if (actuales.length === 0) {
+      return;
+    }
+
+    const antesDeOrden = Math.min(...actuales.map((fila) => fila.ordenBanco));
+    const bancoActual = banco;
+    const anioActual = anio;
+    cargandoRef.current = true;
+    setCargando(true);
+
+    try {
+      const acceso = await import("@/modules/punteo-banco/acceso-oficial");
+      const paginaDatos = await acceso.leerMovimientosAnio({
+        banco: bancoActual,
+        anio: anioActual,
+        limite: LIMITE,
+        antesDeOrden,
+      });
+
+      if (contextoRef.current.banco !== bancoActual || contextoRef.current.anio !== anioActual) {
+        return;
+      }
+
+      const unidas = unirBloque(filasRef.current, paginaDatos.filas);
+      const siguientes = incorporarBorradores(unidas, borradoresRef.current);
+      borradoresRef.current = siguientes.borradores;
+      setBorradores(siguientes.borradores);
+      setFilas(siguientes.filas);
+      const sigue = paginaDatos.hayMas && unidas.length > filasRef.current.length;
+      setHayMas(sigue);
+      hayMasRef.current = sigue;
+      paginaDatos.filas.forEach((fila) => {
+        textosRef.current.set(fila.id, fila.observaciones);
+      });
+    } catch (error: unknown) {
+      setErrorLectura(
+        error instanceof Error
+          ? error.message
+          : "No se ha podido cargar el siguiente bloque. Los movimientos ya visibles se conservan."
+      );
+    } finally {
+      cargandoRef.current = false;
+      setCargando(false);
+    }
+  }, [anio, banco]);
+
   const hayNotasPendientes = [...borradores.values()].some(estaPendiente);
   const marcas: Record<string, "pendiente" | "error" | "conflicto"> = {};
 
@@ -637,10 +729,12 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
 
   return {
     activo,
-    pagina,
-    setPagina,
     hayMas,
     cargando,
+    recarga,
+    ultimo,
+    cargandoUltimo,
+    cargarMas,
     errorLectura,
     meses,
     movimientos,
@@ -673,4 +767,27 @@ function textoLectura(lectura: Extract<ResultadoLectura, { ok: false }>) {
   }
 
   return "No se reconoce el extracto. No se ha enviado nada a la base.";
+}
+
+function incorporarBorradores(
+  filasNuevas: MovimientoOficial[],
+  borradores: Map<number, BorradorObservacion>
+) {
+  const siguientes = new Map(borradores);
+
+  filasNuevas.forEach((fila) => {
+    const nota = siguientes.get(fila.id);
+
+    if (nota) {
+      siguientes.set(
+        fila.id,
+        actualizarOficialDesdeServidor(nota, fila.observaciones, fila.estado, fila.decisionProtegida)
+      );
+    }
+  });
+
+  return {
+    borradores: siguientes,
+    filas: combinarFilasConBorradores(filasNuevas, siguientes),
+  };
 }

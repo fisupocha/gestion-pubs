@@ -19,10 +19,19 @@ type SeparacionBorradorProps = {
   banco: BancoPunteoId;
   anio: number;
   borrador: LineaBorrador[];
+  ultimo: UltimoMovimientoOficial | null;
+  cargandoUltimo: boolean;
+  recarga: number;
 };
 
-export function SeparacionBorrador({ banco, anio, borrador }: SeparacionBorradorProps) {
-  const [ultimo, setUltimo] = useState<UltimoMovimientoOficial | null>(null);
+export function SeparacionBorrador({
+  banco,
+  anio,
+  borrador,
+  ultimo,
+  cargandoUltimo,
+  recarga,
+}: SeparacionBorradorProps) {
   const [importaciones, setImportaciones] = useState<ImportacionOficial[]>([]);
   const [aviso, setAviso] = useState("Cargando datos oficiales…");
   const [consulta, setConsulta] = useState(false);
@@ -37,16 +46,12 @@ export function SeparacionBorrador({ banco, anio, borrador }: SeparacionBorrador
 
     void import("@/modules/punteo-banco/acceso-oficial")
       .then(async (acceso) => {
-        const [movimiento, archivos] = await Promise.all([
-          acceso.leerUltimoMovimiento(banco),
-          acceso.leerImportaciones(banco),
-        ]);
+        const archivos = await acceso.leerImportaciones(banco);
 
         if (!vigente) {
           return;
         }
 
-        setUltimo(movimiento);
         setImportaciones(archivos);
         setAviso("");
       })
@@ -55,7 +60,6 @@ export function SeparacionBorrador({ banco, anio, borrador }: SeparacionBorrador
           return;
         }
 
-        setUltimo(null);
         setImportaciones([]);
         setAviso(error instanceof Error ? error.message : "No se han podido leer los datos oficiales.");
       });
@@ -63,7 +67,7 @@ export function SeparacionBorrador({ banco, anio, borrador }: SeparacionBorrador
     return () => {
       vigente = false;
     };
-  }, [banco]);
+  }, [banco, recarga]);
 
   if (!conexionPunteoActiva()) {
     return null;
@@ -85,13 +89,16 @@ export function SeparacionBorrador({ banco, anio, borrador }: SeparacionBorrador
             {aviso}
           </p>
         ) : null}
-        {!aviso && ultimo ? (
+        {cargandoUltimo ? (
+          <p className="mt-1 leading-5">Cargando el último movimiento…</p>
+        ) : ultimo ? (
           <p className="mt-1 font-semibold leading-5">
             Último movimiento: {formatearFechaIso(ultimo.fecha)} · {ultimo.concepto} ·{" "}
             {formatearCentimos(ultimo.importeCentimos)} € · saldo {formatearCentimos(ultimo.saldoCentimos)} €
           </p>
-        ) : null}
-        {!aviso && !ultimo ? <p className="mt-1 leading-5">No hay un último movimiento registrado para este banco.</p> : null}
+        ) : (
+          <p className="mt-1 leading-5">No hay un último movimiento registrado para este banco.</p>
+        )}
         {importaciones.length > 0 ? (
           <ul className="mt-1 max-h-36 space-y-0.5 overflow-auto leading-5">
             {importaciones.map((archivo) => (

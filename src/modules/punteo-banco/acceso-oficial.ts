@@ -91,11 +91,11 @@ export async function leerMovimientosAnio(opciones: {
   anio: number;
   desde?: number;
   limite?: number;
+  antesDeOrden?: number;
 }): Promise<PaginaOficial> {
   exigirConexionPunteo();
-  const desde = Math.max(0, opciones.desde ?? 0);
   const limite = Math.min(LIMITE_PAGINA, Math.max(1, opciones.limite ?? 100));
-  const { data, error } = await supabase
+  let consulta = supabase
     .from("punteo_movimientos")
     .select(COLUMNAS_MOVIMIENTO)
     .eq("banco", opciones.banco)
@@ -103,8 +103,13 @@ export async function leerMovimientosAnio(opciones: {
     .in("clase", [...CLASES_VISIBLES])
     .gte("fecha_operacion", `${opciones.anio}-01-01`)
     .lte("fecha_operacion", `${opciones.anio}-12-31`)
-    .order("orden_banco", { ascending: false })
-    .range(desde, desde + limite);
+    .order("orden_banco", { ascending: false });
+
+  if (opciones.antesDeOrden !== undefined) {
+    consulta = consulta.lt("orden_banco", opciones.antesDeOrden);
+  }
+
+  const { data, error } = await consulta.range(0, limite);
 
   if (error) {
     throw new Error(mensajeErrorSeguro(error));
@@ -115,7 +120,7 @@ export async function leerMovimientosAnio(opciones: {
 
   return {
     filas: hayMas ? filas.slice(0, limite) : filas,
-    desde,
+    desde: 0,
     limite,
     hayMas,
   };

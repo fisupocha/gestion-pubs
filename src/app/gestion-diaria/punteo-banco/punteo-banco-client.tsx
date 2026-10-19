@@ -113,9 +113,7 @@ export function PunteoBancoClient() {
   const [orden, setOrden] = useState<OrdenOk>("original");
   const [correccion, setCorreccion] = useState<{ id: string; estado: EstadoOk; motivo: string } | null>(null);
   const [accionPendiente, setAccionPendiente] = useState<AccionNavegacion | null>(null);
-  const [navegacionNota, setNavegacionNota] = useState<AccionNavegacion | { tipo: "pagina"; pagina: number } | null>(
-    null
-  );
+  const [navegacionNota, setNavegacionNota] = useState<AccionNavegacion | null>(null);
   const [aviso, setAviso] = useState<AvisoPunteo | null>(null);
   const omitirPopstate = useRef(0);
   const archivadorPunteo = useArchivadorPunteo();
@@ -147,7 +145,7 @@ export function PunteoBancoClient() {
   );
   const movimientosVisibles = useMemo(() => {
     if (conexionPunteoActiva()) {
-      return ordenarMovimientos(modo.movimientos, orden);
+      return ordenarMovimientos(modo.movimientos, "original");
     }
 
     const delAnio = archivador.movimientos
@@ -480,6 +478,9 @@ export function PunteoBancoClient() {
             <SeparacionBorrador
               banco={bancoId}
               anio={anio}
+              ultimo={modo.ultimo}
+              cargandoUltimo={modo.cargandoUltimo}
+              recarga={modo.recarga}
               borrador={archivador.movimientos
                 .filter((movimiento) => movimiento.banco === bancoId)
                 .map((movimiento) => ({
@@ -538,9 +539,14 @@ export function PunteoBancoClient() {
 
           <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-1.5 min-[1280px]:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)] min-[1280px]:grid-rows-1">
             <div className="flex min-h-0 min-w-0 flex-col gap-1.5">
-              <ReferenciaRegistrada
-                referencia={referenciaVigente(bancoId, archivador.referenciasConfirmadas)}
-              />
+              {conexionPunteoActiva() ? (
+                <ReferenciaRegistrada modo="oficial" ultimo={modo.ultimo} cargando={modo.cargandoUltimo} />
+              ) : (
+                <ReferenciaRegistrada
+                  modo="local"
+                  referencia={referenciaVigente(bancoId, archivador.referenciasConfirmadas)}
+                />
+              )}
               <div className="min-h-0 flex-1">
                 <TablaMovimientos
                   banco={bancoNombre}
@@ -554,6 +560,13 @@ export function PunteoBancoClient() {
                       : undefined
                   }
                   marcas={conexionPunteoActiva() ? modo.marcas : undefined}
+                  onLlegarAlFinal={
+                    conexionPunteoActiva() && modo.hayMas
+                      ? () => {
+                          void modo.cargarMas();
+                        }
+                      : undefined
+                  }
                   onConfirmarObservacion={
                     conexionPunteoActiva()
                       ? (id, valor) => {
@@ -585,44 +598,8 @@ export function PunteoBancoClient() {
                     setAviso(null);
                   }}
                 />
-                {conexionPunteoActiva() ? (
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      type="button"
-                      className={botonCompacto}
-                      disabled={modo.pagina === 0}
-                      onClick={() => {
-                        const destino = Math.max(0, modo.pagina - 1);
-
-                        if (modo.hayNotasPendientes) {
-                          setNavegacionNota({ tipo: "pagina", pagina: destino });
-                          return;
-                        }
-
-                        modo.setPagina(destino);
-                      }}
-                    >
-                      Anterior
-                    </button>
-                    <span className="text-sm font-semibold text-[#4b312b]">Página {modo.pagina + 1}</span>
-                    <button
-                      type="button"
-                      className={botonCompacto}
-                      disabled={!modo.hayMas}
-                      onClick={() => {
-                        const destino = modo.pagina + 1;
-
-                        if (modo.hayNotasPendientes) {
-                          setNavegacionNota({ tipo: "pagina", pagina: destino });
-                          return;
-                        }
-
-                        modo.setPagina(destino);
-                      }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                {conexionPunteoActiva() && modo.cargando && modo.movimientos.length > 0 ? (
+                  <p className="px-0.5 text-sm font-semibold leading-5 text-[#5d433a]">Cargando más movimientos…</p>
                 ) : null}
               </div>
             </div>
@@ -661,12 +638,6 @@ export function PunteoBancoClient() {
 
               const accion = navegacionNota;
               setNavegacionNota(null);
-
-              if (accion.tipo === "pagina") {
-                modo.setPagina(accion.pagina);
-                return;
-              }
-
               aplicarAccion(accion);
             });
           }}
@@ -675,11 +646,6 @@ export function PunteoBancoClient() {
             setNavegacionNota(null);
 
             if (!accion) {
-              return;
-            }
-
-            if (accion.tipo === "pagina") {
-              modo.setPagina(accion.pagina);
               return;
             }
 
