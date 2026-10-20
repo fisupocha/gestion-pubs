@@ -3,6 +3,9 @@ import { exigirConexionPunteo } from "./conexion-punteo";
 import { lineasOficiales } from "./linea-oficial";
 import { mensajeErrorSeguro, type ResultadoOficial } from "./mensajes-importacion";
 import { identificarExcel } from "./importacion-doble";
+import { argumentosConsulta } from "./consulta-movimientos";
+import { detallarMesTpv, type LineaTpvDetalle } from "./detalle-tpv";
+import { planGuardarLocal, type ColumnaOrdenPunteo, type FiltroLocal, type LocalPunteo } from "./locales-punteo";
 import { decisionPaginaTpv, sumarImportesTpv, TAMANO_PAGINA_TPV, type MesTpvOficial } from "./paginacion-tpv";
 import { asignarDevolucionCentimos, type LineaReparto } from "./reparto-abono-comision";
 import type { BancoPunteoId, EstadoOk } from "./modelo";
@@ -22,9 +25,11 @@ export type MovimientoOficial = {
   detallesOriginales: string;
   clase: ClaseMovimiento;
   observaciones: string;
+  local: LocalPunteo | null;
   estado: EstadoOk;
   decisionProtegida: boolean;
   ordenBanco: number;
+  referencias: string[];
   motivoEstado: string;
   origenEstado: string;
 };
@@ -77,11 +82,14 @@ type FilaMovimiento = {
   detalles_originales: string;
   clase: ClaseMovimiento;
   observaciones: string;
+  local?: string | null;
   estado: EstadoOk;
   decision_protegida: boolean;
   orden_banco: number;
   motivo_estado: string;
   origen_estado: string;
+  concepto?: string;
+  referencias?: string[] | null;
 };
 
 const COLUMNAS_MOVIMIENTO =
@@ -125,6 +133,109 @@ export async function leerMovimientosAnio(opciones: {
     limite,
     hayMas,
   };
+}
+
+const CLASES_DETALLE_TPV = ["tpv-ingreso", "tpv-comision", "tpv-devolucion", "tpv-mantenimiento"] as const;
+
+export async function consultarMovimientosOficial(opciones: {
+  banco: BancoPunteoId;
+  anio: number;
+  filtroLocal: FiltroLocal;
+  busqueda: string;
+  columna: ColumnaOrdenPunteo;
+  ascendente: boolean;
+  ambito: "ordinarios" | "tpv";
+  desde: number;
+  limite?: number;
+}): Promise<PaginaOficial> {
+  exigirConexionPunteo();
+  const limite = Math.min(LIMITE_PAGINA, Math.max(1, opciones.limite ?? 100));
+  const { data, error } = await supabase.rpc(
+    "punteo_consultar_movimientos",
+    argumentosConsulta({
+      banco: opciones.banco,
+      anio: opciones.anio,
+      filtroLocal: opciones.filtroLocal,
+      busqueda: opciones.busqueda,
+      columna: opciones.columna,
+      ascendente: opciones.ascendente,
+      ambito: opciones.ambito,
+      desde: opciones.desde,
+      limite,
+    })
+  );
+
+  if (error) {
+    throw new Error(mensajeErrorSeguro(error));
+  }
+
+  const respuesta = (data ?? {}) as {
+    ok?: boolean;
+    motivo?: string;
+    filas?: FilaMovimiento[];
+    hay_mas?: boolean;
+  };
+
+  if (!respuesta.ok) {
+    throw new Error(respuesta.motivo || "No se han podido consultar los movimientos.");
+  }
+
+  return {
+    filas: (respuesta.filas ?? []).map(mapearMovimiento),
+    desde: opciones.desde,
+    limite,
+    hayMas: Boolean(respuesta.hay_mas),
+  };
+}
+
+export async function leerDetalleTpv(banco: BancoPunteoId, anio: number, mes: number) {
+  exigirConexionPunteo();
+  const lineas: LineaTpvDetalle[] = [];
+  let cursor = 0;
+
+  for (let pagina = 0; pagina < 500; pagina += 1) {
+    const { data, error } = await supabase
+      .from("punteo_movimientos")
+      .select(
+        "id, fecha_operacion, fecha_valor, importe_centimos, clase, concepto_original, detalles_originales, orden_banco, referencias"
+      )
+      .eq("banco", banco)
+      .eq("vigente", true)
+      .in("clase", [...CLASES_DETALLE_TPV])
+      .gte("fecha_operacion", `${anio}-01-01`)
+      .lte("fecha_operacion", `${anio}-12-31`)
+      .order("orden_banco", { ascending: true })
+      .order("id", { ascending: true })
+      .range(cursor, cursor + TAMANO_PAGINA_TPV - 1);
+
+    if (error) {
+      throw new Error(mensajeErrorSeguro(error));
+    }
+
+    const recibidas = data?.length ?? 0;
+
+    for (const fila of data ?? []) {
+      lineas.push({
+        id: String(fila.id),
+        fecha: String(fila.fecha_operacion),
+        fechaValor: fila.fecha_valor ? String(fila.fecha_valor) : "",
+        importeCentimos: Number(fila.importe_centimos),
+        clase: String(fila.clase),
+        conceptoOriginal: String(fila.concepto_original ?? ""),
+        detallesOriginales: String(fila.detalles_originales ?? ""),
+        ordenBanco: Number(fila.orden_banco),
+        referencias: Array.isArray(fila.referencias) ? fila.referencias.map(String) : [],
+      });
+    }
+
+    if (recibidas < TAMANO_PAGINA_TPV) {
+      return detallarMesTpv(anio, mes, lineas);
+    }
+
+    cursor += TAMANO_PAGINA_TPV;
+  }
+
+  throw new Error("No se ha podido completar el detalle TPV.");
 }
 
 export async function leerUltimoMovimiento(banco: BancoPunteoId): Promise<UltimoMovimientoOficial | null> {
@@ -409,6 +520,25 @@ export async function cambiarEstadoOficial(opciones: {
   });
 }
 
+export async function guardarLocalOficial(movimientoId: number, local: LocalPunteo | null) {
+  const plan = planGuardarLocal(movimientoId, local);
+
+  if (!plan.ok) {
+    return {
+      ok: false,
+      motivo: plan.motivo,
+      local: null,
+      estado: "pendiente",
+    };
+  }
+
+  exigirConexionPunteo();
+  return ejecutar("punteo_guardar_local", {
+    p_movimiento_id: plan.llamada.p_movimiento_id,
+    p_local: plan.llamada.p_local,
+  });
+}
+
 export async function guardarObservacionOficial(
   movimientoId: number,
   observaciones: string,
@@ -501,12 +631,19 @@ function mapearMovimiento(fila: FilaMovimiento): MovimientoOficial {
     detallesOriginales: fila.detalles_originales,
     clase: fila.clase,
     observaciones: fila.observaciones,
+    local: localLeido(fila.local),
     estado: fila.estado,
     decisionProtegida: fila.decision_protegida,
     ordenBanco: fila.orden_banco,
+    referencias: Array.isArray(fila.referencias) ? fila.referencias.map(String) : [],
     motivoEstado: fila.motivo_estado,
     origenEstado: fila.origen_estado,
   };
+}
+
+function localLeido(valor: string | null | undefined): LocalPunteo | null {
+  const plan = planGuardarLocal(0, valor ?? null);
+  return plan.ok ? plan.local : null;
 }
 
 function diasDelMes(anio: number, mes: number) {

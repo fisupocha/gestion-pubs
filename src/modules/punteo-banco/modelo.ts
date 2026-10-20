@@ -1,4 +1,5 @@
 import type { CoberturaExtracto, PeriodoExtracto } from "./cobertura-extracto";
+import type { LocalPunteo } from "./locales-punteo";
 
 export const BANCOS_PUNTEO = [
   { id: "caixabank", nombre: "CaixaBank" },
@@ -48,6 +49,8 @@ export type MovimientoPunteo = {
   importe: string;
   concepto: string;
   observaciones: string;
+  /** NULL en base es Sin asignar. */
+  local: LocalPunteo | null;
   ok: EstadoOk;
   /** Posición en la secuencia bancaria. El número alto es el más reciente. No es la fecha. */
   orden: number;

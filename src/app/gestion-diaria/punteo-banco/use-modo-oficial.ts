@@ -6,6 +6,8 @@ import { formatearCentimos } from "@/modules/punteo-banco/centimos";
 import { conexionPunteoActiva } from "@/modules/punteo-banco/conexion-punteo";
 import { decidirConsulta, ejecutarCargaEnDosPartes, identificarExcel } from "@/modules/punteo-banco/importacion-doble";
 import { leerExtracto, type ResultadoLectura } from "@/modules/punteo-banco/leer-extracto";
+import { anexarSinDuplicar } from "@/modules/punteo-banco/consulta-movimientos";
+import { encajaFiltroLocal, type ColumnaOrdenPunteo, type FiltroLocal, type LocalPunteo } from "@/modules/punteo-banco/locales-punteo";
 import type { BancoPunteoId, EstadoOk, MovimientoPunteo } from "@/modules/punteo-banco/modelo";
 import type { MovimientoOficial, UltimoMovimientoOficial } from "@/modules/punteo-banco/acceso-oficial";
 import {
@@ -21,7 +23,7 @@ import {
   prepararGuardadoObservacion,
   type BorradorObservacion,
 } from "@/modules/punteo-banco/observacion-borrador";
-import { TAMANO_BLOQUE, unirBloque } from "@/modules/punteo-banco/bloques-lista";
+import { TAMANO_BLOQUE } from "@/modules/punteo-banco/bloques-lista";
 import type { MesTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
 import { prepararCargaOficial, type PlanCargaOficial } from "@/modules/punteo-banco/preparar-carga-oficial";
 import type { AvisoPunteo } from "./use-archivador-punteo";
@@ -44,10 +46,19 @@ export type IncertidumbreCarga = {
   puedeRepetir: boolean;
 };
 
-export function useModoOficial(banco: BancoPunteoId, anio: number) {
+export type ConsultaOficial = {
+  filtroLocal: FiltroLocal;
+  busqueda: string;
+  columna: ColumnaOrdenPunteo;
+  ascendente: boolean;
+};
+
+export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: ConsultaOficial) {
   const activo = conexionPunteoActiva();
   const [filas, setFilas] = useState<MovimientoOficial[]>([]);
+  const [coincidenciasTpv, setCoincidenciasTpv] = useState<MovimientoOficial[]>([]);
   const [hayMas, setHayMas] = useState(false);
+  const [hayMasTpv, setHayMasTpv] = useState(false);
   const [ultimo, setUltimo] = useState<UltimoMovimientoOficial | null>(null);
   const [cargandoUltimo, setCargandoUltimo] = useState(false);
   const [meses, setMeses] = useState<MesTpvOficial[]>([]);
@@ -64,8 +75,13 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
   const textosRef = useRef<Map<number, string>>(new Map());
   const borradoresRef = useRef<Map<number, BorradorObservacion>>(new Map());
   const hayMasRef = useRef(false);
+  const hayMasTpvRef = useRef(false);
   const cargandoRef = useRef(false);
+  const desdeRef = useRef(0);
+  const desdeTpvRef = useRef(0);
+  const consultaRef = useRef(consulta);
   const contextoRef = useRef({ banco, anio });
+  consultaRef.current = consulta;
 
   useEffect(() => {
     filasRef.current = filas;
@@ -99,26 +115,46 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     }
 
     let vivo = true;
-    const cambio = contextoRef.current.banco !== banco || contextoRef.current.anio !== anio;
     contextoRef.current = { banco, anio };
-
-    if (cambio) {
-      setFilas([]);
-      setHayMas(false);
-      hayMasRef.current = false;
-    }
-
+    desdeRef.current = 0;
+    desdeTpvRef.current = 0;
+    setFilas([]);
+    setCoincidenciasTpv([]);
+    setHayMas(false);
+    setHayMasTpv(false);
+    hayMasRef.current = false;
+    hayMasTpvRef.current = false;
     cargandoRef.current = true;
     setCargando(true);
     setErrorLectura(null);
 
     void import("@/modules/punteo-banco/acceso-oficial")
       .then(async (acceso) => {
-        const paginaDatos = await acceso.leerMovimientosAnio({
+        const paginaDatos = await acceso.consultarMovimientosOficial({
           banco,
           anio,
+          filtroLocal: consulta.filtroLocal,
+          busqueda: consulta.busqueda,
+          columna: consulta.columna,
+          ascendente: consulta.ascendente,
+          ambito: "ordinarios",
+          desde: 0,
           limite: LIMITE,
         });
+        const busqueda = consulta.busqueda.trim();
+        const paginaTpv = busqueda
+          ? await acceso.consultarMovimientosOficial({
+              banco,
+              anio,
+              filtroLocal: consulta.filtroLocal,
+              busqueda: consulta.busqueda,
+              columna: consulta.columna,
+              ascendente: consulta.ascendente,
+              ambito: "tpv",
+              desde: 0,
+              limite: LIMITE,
+            })
+          : null;
 
         if (!vivo) {
           return;
@@ -128,11 +164,16 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
         borradoresRef.current = siguientes.borradores;
         setBorradores(siguientes.borradores);
         setFilas(siguientes.filas);
+        desdeRef.current = paginaDatos.filas.length;
         setHayMas(paginaDatos.hayMas);
         hayMasRef.current = paginaDatos.hayMas;
         paginaDatos.filas.forEach((fila) => {
           textosRef.current.set(fila.id, fila.observaciones);
         });
+        setCoincidenciasTpv(paginaTpv?.filas ?? []);
+        desdeTpvRef.current = paginaTpv?.filas.length ?? 0;
+        setHayMasTpv(paginaTpv?.hayMas ?? false);
+        hayMasTpvRef.current = paginaTpv?.hayMas ?? false;
         setErrorLectura(null);
       })
       .catch((error: unknown) => {
@@ -156,7 +197,7 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     return () => {
       vivo = false;
     };
-  }, [anio, banco, recarga]);
+  }, [anio, banco, consulta.ascendente, consulta.busqueda, consulta.columna, consulta.filtroLocal, recarga]);
 
   useEffect(() => {
     if (!conexionPunteoActiva()) {
@@ -621,39 +662,43 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
       return;
     }
 
-    const actuales = filasRef.current;
-
-    if (actuales.length === 0) {
-      return;
-    }
-
-    const antesDeOrden = Math.min(...actuales.map((fila) => fila.ordenBanco));
     const bancoActual = banco;
     const anioActual = anio;
+    const pedida = consultaRef.current;
+    const desde = desdeRef.current;
     cargandoRef.current = true;
     setCargando(true);
 
     try {
       const acceso = await import("@/modules/punteo-banco/acceso-oficial");
-      const paginaDatos = await acceso.leerMovimientosAnio({
+      const paginaDatos = await acceso.consultarMovimientosOficial({
         banco: bancoActual,
         anio: anioActual,
+        filtroLocal: pedida.filtroLocal,
+        busqueda: pedida.busqueda,
+        columna: pedida.columna,
+        ascendente: pedida.ascendente,
+        ambito: "ordinarios",
+        desde,
         limite: LIMITE,
-        antesDeOrden,
       });
 
-      if (contextoRef.current.banco !== bancoActual || contextoRef.current.anio !== anioActual) {
+      if (
+        contextoRef.current.banco !== bancoActual ||
+        contextoRef.current.anio !== anioActual ||
+        consultaRef.current !== pedida
+      ) {
         return;
       }
 
-      const unidas = unirBloque(filasRef.current, paginaDatos.filas);
+      desdeRef.current += paginaDatos.filas.length;
+      const unidas = anexarSinDuplicar(filasRef.current, paginaDatos.filas);
       const siguientes = incorporarBorradores(unidas, borradoresRef.current);
       borradoresRef.current = siguientes.borradores;
       setBorradores(siguientes.borradores);
       setFilas(siguientes.filas);
-      const sigue = paginaDatos.hayMas && unidas.length > filasRef.current.length;
-      setHayMas(sigue);
-      hayMasRef.current = sigue;
+      setHayMas(paginaDatos.hayMas);
+      hayMasRef.current = paginaDatos.hayMas;
       paginaDatos.filas.forEach((fila) => {
         textosRef.current.set(fila.id, fila.observaciones);
       });
@@ -668,6 +713,110 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
       setCargando(false);
     }
   }, [anio, banco]);
+
+  const cargarMasTpv = useCallback(async () => {
+    if (!conexionPunteoActiva() || cargandoRef.current || !hayMasTpvRef.current) {
+      return;
+    }
+
+    const bancoActual = banco;
+    const anioActual = anio;
+    const pedida = consultaRef.current;
+    const desde = desdeTpvRef.current;
+    cargandoRef.current = true;
+    setCargando(true);
+
+    try {
+      const acceso = await import("@/modules/punteo-banco/acceso-oficial");
+      const paginaDatos = await acceso.consultarMovimientosOficial({
+        banco: bancoActual,
+        anio: anioActual,
+        filtroLocal: pedida.filtroLocal,
+        busqueda: pedida.busqueda,
+        columna: pedida.columna,
+        ascendente: pedida.ascendente,
+        ambito: "tpv",
+        desde,
+        limite: LIMITE,
+      });
+
+      if (contextoRef.current.banco !== bancoActual || contextoRef.current.anio !== anioActual || consultaRef.current !== pedida) {
+        return;
+      }
+
+      desdeTpvRef.current += paginaDatos.filas.length;
+      setCoincidenciasTpv((previas) => anexarSinDuplicar(previas, paginaDatos.filas));
+      setHayMasTpv(paginaDatos.hayMas);
+      hayMasTpvRef.current = paginaDatos.hayMas;
+    } catch (error: unknown) {
+      setErrorLectura(
+        error instanceof Error ? error.message : "No se ha podido cargar el resto de coincidencias TPV."
+      );
+    } finally {
+      cargandoRef.current = false;
+      setCargando(false);
+    }
+  }, [anio, banco]);
+
+  const guardarLocal = useCallback(async (id: string, local: LocalPunteo | null): Promise<AvisoPunteo> => {
+    const numerico = Number(id);
+    const fila = filasRef.current.find((actual) => actual.id === numerico);
+
+    if (!fila) {
+      return { tono: "info", texto: "No se ha encontrado el movimiento." };
+    }
+
+    if (fila.local === local) {
+      return { tono: "info", texto: "El local ya era ese." };
+    }
+
+    const estadoPrevio = fila.estado;
+    const localPrevio = fila.local;
+    setFilas((previas) =>
+      previas.map((actual) => (actual.id === numerico ? { ...actual, local, estado: estadoPrevio } : actual))
+    );
+
+    try {
+      const acceso = await import("@/modules/punteo-banco/acceso-oficial");
+      const resultado = await acceso.guardarLocalOficial(numerico, local);
+
+      if (!resultado.ok || (resultado.estado && resultado.estado !== estadoPrevio)) {
+        setFilas((previas) =>
+          previas.map((actual) =>
+            actual.id === numerico ? { ...actual, local: localPrevio, estado: estadoPrevio } : actual
+          )
+        );
+        return {
+          tono: "error",
+          texto: resultado.motivo || "No se ha guardado el local. El estado se conserva.",
+        };
+      }
+
+      if (!encajaFiltroLocal(local, consultaRef.current.filtroLocal)) {
+        desdeRef.current = Math.max(0, desdeRef.current - 1);
+        setFilas((previas) => previas.filter((actual) => actual.id !== numerico));
+      } else {
+        setFilas((previas) =>
+          previas.map((actual) => (actual.id === numerico ? { ...actual, local, estado: estadoPrevio } : actual))
+        );
+      }
+
+      return {
+        tono: "ok",
+        texto: local ? `Local ${local} guardado. El estado no ha cambiado.` : "Local quitado. El estado no ha cambiado.",
+      };
+    } catch (error: unknown) {
+      setFilas((previas) =>
+        previas.map((actual) =>
+          actual.id === numerico ? { ...actual, local: localPrevio, estado: estadoPrevio } : actual
+        )
+      );
+      return {
+        tono: "error",
+        texto: error instanceof Error ? error.message : "No se ha guardado el local. El estado se conserva.",
+      };
+    }
+  }, []);
 
   const hayNotasPendientes = [...borradores.values()].some(estaPendiente);
   const marcas: Record<string, "pendiente" | "error" | "conflicto"> = {};
@@ -687,6 +836,7 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     importe: formatearCentimos(fila.importeCentimos),
     concepto: fila.conceptoOriginal,
     observaciones: fila.observaciones,
+    local: fila.local,
     ok: fila.estado,
     orden: fila.ordenBanco,
   }));
@@ -694,11 +844,15 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
   return {
     activo,
     hayMas,
+    hayMasTpv,
+    coincidenciasTpv,
     cargando,
     recarga,
     ultimo,
     cargandoUltimo,
     cargarMas,
+    cargarMasTpv,
+    guardarLocal,
     errorLectura,
     meses,
     movimientos,

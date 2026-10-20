@@ -2,21 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { aCentimos, formatearCentimos } from "@/modules/punteo-banco/centimos";
 import { formatearImporte } from "@/modules/punteo-banco/celdas";
 import { calcularCoberturaExtracto } from "@/modules/punteo-banco/cobertura-extracto";
+import { consultarMovimientos, type ConsultaMovimiento } from "@/modules/punteo-banco/consulta-movimientos";
+import {
+  LOCALES_PUNTEO,
+  type ColumnaOrdenPunteo,
+  type FiltroLocal,
+} from "@/modules/punteo-banco/locales-punteo";
 import {
   ANIO_INICIAL_PUNTEO,
   ANIOS_PUNTEO,
   BANCOS_PUNTEO,
   type BancoPunteoId,
   type EstadoOk,
-  type OrdenOk,
   formatearFechaIso,
   nombreBanco,
-  ordenarMovimientos,
 } from "@/modules/punteo-banco/modelo";
 import { requiereConfirmacionManual, textoConfirmacionManual } from "@/modules/punteo-banco/decision-estado";
-import { esVisibleEnTabla, type PeriodoBanco } from "@/modules/punteo-banco/movimiento-interno";
+import type { MovimientoInterno, PeriodoBanco } from "@/modules/punteo-banco/movimiento-interno";
 import { conexionPunteoActiva } from "@/modules/punteo-banco/conexion-punteo";
 import { referenciaVigente } from "@/modules/punteo-banco/referencias-iniciales";
 import { presentarTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
@@ -28,7 +33,9 @@ import {
   botonPestanaActiva,
   botonPestanaInactiva,
 } from "./clases";
+import { CoincidenciasTpv } from "./coincidencias-tpv";
 import { DialogoCambios } from "./dialogo-cambios";
+import { DialogoDetalleTpv } from "./dialogo-detalle-tpv";
 import { DialogoConfirmarImportacion } from "./dialogo-confirmar-importacion";
 import { DialogoCorreccionEstado } from "./dialogo-correccion-estado";
 import { DialogoImportacionOficial } from "./dialogo-importacion-oficial";
@@ -39,7 +46,7 @@ import { ResumenTpv } from "./resumen-tpv";
 import { RevisionConjunta } from "./revision-conjunta";
 import { TablaMovimientos } from "./tabla-movimientos";
 import { useArchivadorPunteo, type AvisoPunteo } from "./use-archivador-punteo";
-import { useModoOficial } from "./use-modo-oficial";
+import { useModoOficial, type ConsultaOficial } from "./use-modo-oficial";
 
 type VistaPunteo = "banco" | "revision";
 
@@ -110,7 +117,12 @@ export function PunteoBancoClient() {
   const [bancoId, setBancoId] = useState<BancoPunteoId>("caixabank");
   const [anio, setAnio] = useState(ANIO_INICIAL_PUNTEO);
   const [vista, setVista] = useState<VistaPunteo>("banco");
-  const [orden, setOrden] = useState<OrdenOk>("original");
+  const [filtroLocal, setFiltroLocal] = useState<FiltroLocal>("todos");
+  const [busqueda, setBusqueda] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
+  const [columnaOrden, setColumnaOrden] = useState<ColumnaOrdenPunteo>("orden_banco");
+  const [ascendente, setAscendente] = useState(false);
+  const [mesTpv, setMesTpv] = useState<number | null>(null);
   const [correccion, setCorreccion] = useState<{ id: string; estado: EstadoOk; motivo: string } | null>(null);
   const [accionPendiente, setAccionPendiente] = useState<AccionNavegacion | null>(null);
   const [navegacionNota, setNavegacionNota] = useState<AccionNavegacion | null>(null);
@@ -130,7 +142,21 @@ export function PunteoBancoClient() {
     confirmarImportacion,
     cancelarImportacion,
   } = archivadorPunteo;
-  const modo = useModoOficial(bancoId, anio);
+  const consultaOficial = useMemo<ConsultaOficial>(
+    () => ({
+      filtroLocal,
+      busqueda: busquedaAplicada,
+      columna: columnaOrden,
+      ascendente,
+    }),
+    [ascendente, busquedaAplicada, columnaOrden, filtroLocal]
+  );
+  const modo = useModoOficial(bancoId, anio, consultaOficial);
+
+  useEffect(() => {
+    const espera = window.setTimeout(() => setBusquedaAplicada(busqueda), 250);
+    return () => window.clearTimeout(espera);
+  }, [busqueda]);
   const hoy = useMemo(() => hoyLocal(), []);
   const bancoNombre = nombreBanco(bancoId);
 
@@ -144,29 +170,87 @@ export function PunteoBancoClient() {
   );
   const movimientosVisibles = useMemo(() => {
     if (conexionPunteoActiva()) {
-      return ordenarMovimientos(modo.movimientos, "original");
+      return modo.movimientos;
     }
 
-    const delAnio = archivador.movimientos
-      .filter(
-        (movimiento) =>
-          movimiento.banco === bancoId &&
-          movimiento.fecha.startsWith(`${anio}-`) &&
-          esVisibleEnTabla(movimiento.clase)
-      )
-      .map((movimiento) => ({
-        id: movimiento.id,
-        fecha: movimiento.fecha,
-        fechaValor: movimiento.fechaValor,
-        importe: formatearImporte(movimiento.importe),
-        concepto: movimiento.concepto,
-        observaciones: movimiento.observaciones,
-        ok: movimiento.ok,
-        orden: movimiento.orden,
-      }));
+    const pagina = consultarMovimientos(
+      archivador.movimientos
+        .filter((movimiento) => movimiento.banco === bancoId && movimiento.fecha.startsWith(`${anio}-`))
+        .map(consultaDesdeArchivo),
+      {
+        filtroLocal,
+        busqueda: busquedaAplicada,
+        columna: columnaOrden,
+        ascendente,
+        ambito: "ordinarios",
+        desde: 0,
+        limite: Math.max(1, archivador.movimientos.length),
+      }
+    );
 
-    return ordenarMovimientos(delAnio, orden);
-  }, [anio, archivador.movimientos, bancoId, modo.movimientos, orden]);
+    return pagina.filas.map((fila) => ({
+      id: fila.clave ?? String(fila.id),
+      fecha: fila.fecha,
+      fechaValor: fila.fechaValor,
+      importe: formatearImporte(fila.importeCentimos / 100),
+      concepto: fila.conceptoOriginal,
+      observaciones: fila.observaciones,
+      local: fila.local,
+      ok: fila.estado as EstadoOk,
+      orden: fila.ordenBanco,
+    }));
+  }, [
+    anio,
+    archivador.movimientos,
+    ascendente,
+    bancoId,
+    busquedaAplicada,
+    columnaOrden,
+    filtroLocal,
+    modo.movimientos,
+  ]);
+  const coincidenciasLocales = useMemo(() => {
+    if (conexionPunteoActiva() || busquedaAplicada.trim() === "") {
+      return [];
+    }
+
+    return consultarMovimientos(
+      archivador.movimientos
+        .filter((movimiento) => movimiento.banco === bancoId && movimiento.fecha.startsWith(`${anio}-`))
+        .map(consultaDesdeArchivo),
+      {
+        filtroLocal,
+        busqueda: busquedaAplicada,
+        columna: columnaOrden,
+        ascendente,
+        ambito: "tpv",
+        desde: 0,
+        limite: Math.max(1, archivador.movimientos.length),
+      }
+    ).filas;
+  }, [anio, archivador.movimientos, ascendente, bancoId, busquedaAplicada, columnaOrden, filtroLocal]);
+  const lineasTpvArchivo = useMemo(
+    () =>
+      archivador.movimientos
+        .filter(
+          (movimiento) =>
+            movimiento.banco === bancoId &&
+            movimiento.fecha.startsWith(`${anio}-`) &&
+            movimiento.clase.startsWith("tpv-")
+        )
+        .map((movimiento) => ({
+          id: movimiento.id,
+          fecha: movimiento.fecha,
+          fechaValor: movimiento.fechaValor,
+          importeCentimos: aCentimos(movimiento.importe),
+          clase: movimiento.clase,
+          conceptoOriginal: movimiento.conceptoOriginal || movimiento.concepto,
+          detallesOriginales: movimiento.detallesOriginales,
+          ordenBanco: movimiento.orden,
+          referencias: movimiento.referencias,
+        })),
+    [anio, archivador.movimientos, bancoId]
+  );
   const filasTpv = useMemo(
     () =>
       conexionPunteoActiva()
@@ -199,13 +283,15 @@ export function PunteoBancoClient() {
       if (accion.tipo === "banco") {
         setVista("banco");
         setBancoId(accion.banco);
-        setOrden("original");
+        setColumnaOrden("orden_banco");
+        setAscendente(false);
         return;
       }
 
       if (accion.tipo === "anio") {
         setAnio(accion.anio);
-        setOrden("original");
+        setColumnaOrden("orden_banco");
+        setAscendente(false);
         return;
       }
 
@@ -546,13 +632,113 @@ export function PunteoBancoClient() {
                   referencia={referenciaVigente(bancoId, archivador.referenciasConfirmadas)}
                 />
               )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <label className="sr-only" htmlFor="filtro-local-punteo">
+                  Filtrar por local
+                </label>
+                <select
+                  id="filtro-local-punteo"
+                  value={filtroLocal}
+                  onChange={(event) => setFiltroLocal(event.target.value as FiltroLocal)}
+                  className="h-8 max-w-[13.5rem] rounded-[8px] border border-[#e4d3ca] bg-white px-1.5 text-xs font-bold text-[#4b312b] outline-none"
+                >
+                  <option value="todos">Orden original — Todos</option>
+                  {LOCALES_PUNTEO.map((local) => (
+                    <option key={local} value={local}>
+                      {local}
+                    </option>
+                  ))}
+                  <option value="sin-asignar">Sin asignar</option>
+                </select>
+                <label className="sr-only" htmlFor="busqueda-punteo">
+                  Buscar movimientos
+                </label>
+                <input
+                  id="busqueda-punteo"
+                  value={busqueda}
+                  onChange={(event) => setBusqueda(event.target.value)}
+                  placeholder="Buscar en todo el banco y año"
+                  className="h-8 min-w-[12rem] flex-1 rounded-[8px] border border-[#e4d3ca] bg-white px-2 text-sm text-[#4b312b] outline-none"
+                />
+                <button
+                  type="button"
+                  className={botonCompacto}
+                  onClick={() => {
+                    setBusqueda("");
+                    setBusquedaAplicada("");
+                  }}
+                  disabled={busqueda === "" && busquedaAplicada === ""}
+                >
+                  Limpiar
+                </button>
+                <button
+                  type="button"
+                  className={botonCompacto}
+                  onClick={() => {
+                    setColumnaOrden("orden_banco");
+                    setAscendente(false);
+                  }}
+                >
+                  Orden original
+                </button>
+              </div>
+              {busquedaAplicada.trim() ? (
+                <CoincidenciasTpv
+                  filas={
+                    conexionPunteoActiva()
+                      ? modo.coincidenciasTpv.map((fila) => ({
+                          id: String(fila.id),
+                          fecha: fila.fecha,
+                          importe: formatearCentimos(fila.importeCentimos),
+                          concepto: fila.conceptoOriginal,
+                          clase: fila.clase,
+                          local: fila.local,
+                        }))
+                      : coincidenciasLocales.map((fila) => ({
+                          id: fila.clave ?? String(fila.id),
+                          fecha: fila.fecha,
+                          importe: formatearImporte(fila.importeCentimos / 100),
+                          concepto: fila.conceptoOriginal,
+                          clase: fila.clase,
+                          local: fila.local,
+                        }))
+                  }
+                  hayMas={conexionPunteoActiva() && modo.hayMasTpv}
+                  onMas={
+                    conexionPunteoActiva() && modo.hayMasTpv
+                      ? () => {
+                          void modo.cargarMasTpv();
+                        }
+                      : undefined
+                  }
+                />
+              ) : null}
               <div className="min-h-0 flex-1">
                 <TablaMovimientos
                   banco={bancoNombre}
                   anio={anio}
                   movimientos={movimientosVisibles}
-                  orden={orden}
-                  onCambioOrden={setOrden}
+                  columnaOrden={columnaOrden}
+                  ascendente={ascendente}
+                  onOrdenar={(columna) => {
+                    if (columna === columnaOrden) {
+                      setAscendente((valor) => !valor);
+                      return;
+                    }
+
+                    setColumnaOrden(columna);
+                    setAscendente(
+                      columna === "concepto" || columna === "observaciones" || columna === "local" || columna === "estado"
+                    );
+                  }}
+                  localEditable={conexionPunteoActiva()}
+                  onCambioLocal={
+                    conexionPunteoActiva()
+                      ? (id, local) => {
+                          void modo.guardarLocal(id, local).then((resultado) => setAviso(resultado));
+                        }
+                      : undefined
+                  }
                   textoVacio={
                     conexionPunteoActiva() && modo.errorLectura
                       ? "No se muestran movimientos porque la lectura ha fallado."
@@ -602,7 +788,7 @@ export function PunteoBancoClient() {
                 ) : null}
               </div>
             </div>
-            <ResumenTpv anio={anio} filas={filasTpv} />
+            <ResumenTpv anio={anio} filas={filasTpv} onVerMes={setMesTpv} />
           </div>
         </div>
       )}
@@ -692,6 +878,55 @@ export function PunteoBancoClient() {
           onCancelar={modo.cancelarEstado}
         />
       ) : null}
+      {mesTpv !== null ? (
+        <DialogoDetalleTpv
+          banco={bancoId}
+          anio={anio}
+          mes={mesTpv}
+          lineasLocales={conexionPunteoActiva() ? null : lineasTpvArchivo}
+          onCerrar={() => setMesTpv(null)}
+        />
+      ) : null}
     </section>
   );
+}
+
+function consultaDesdeArchivo(movimiento: MovimientoInterno): ConsultaMovimiento {
+  return {
+    id: idEstable(movimiento.id),
+    clave: movimiento.id,
+    fecha: movimiento.fecha,
+    fechaValor: movimiento.fechaValor,
+    importeCentimos: aCentimos(movimiento.importe),
+    saldoCentimos: aCentimos(movimiento.saldo ?? 0),
+    concepto: movimiento.concepto,
+    conceptoOriginal: movimiento.conceptoOriginal || movimiento.concepto,
+    conceptoNormalizado: "",
+    detallesOriginales: movimiento.detallesOriginales,
+    observaciones: movimiento.observaciones,
+    local: null,
+    estado: movimiento.ok,
+    clase: movimiento.clase,
+    motivoEstado: "",
+    origenEstado: "",
+    referencias: movimiento.referencias,
+    ordenBanco: movimiento.orden,
+    filaExcel: movimiento.fila,
+  };
+}
+
+function idEstable(id: string) {
+  const directo = Number(id);
+
+  if (Number.isSafeInteger(directo)) {
+    return directo;
+  }
+
+  let hash = 0;
+
+  for (let indice = 0; indice < id.length; indice += 1) {
+    hash = (hash * 33 + id.charCodeAt(indice)) | 0;
+  }
+
+  return Math.abs(hash);
 }

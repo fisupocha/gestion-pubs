@@ -7,6 +7,7 @@ import { tarjetaPunteo } from "./clases";
 type ResumenTpvProps = {
   anio: number;
   filas: FilaResumenTpv[];
+  onVerMes?: (mes: number) => void;
 };
 
 function CeldaDato({ valor, alineacion }: { valor: string | null; alineacion: "left" | "right" }) {
@@ -44,7 +45,7 @@ function Cabecera({
   );
 }
 
-export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
+export function ResumenTpv({ anio, filas, onVerMes }: ResumenTpvProps) {
   return (
     <section
       className={`${tarjetaPunteo} flex h-auto min-w-0 shrink-0 flex-col overflow-visible min-[1280px]:h-full min-[1280px]:overflow-hidden`}
@@ -61,7 +62,7 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
       >
         <div
           role="row"
-          className="grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-[#f7ece7] text-[10px] font-black uppercase tracking-[0.02em] text-[#8b695d]"
+          className="grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))_2.15rem] bg-[#f7ece7] text-[10px] font-black uppercase tracking-[0.02em] text-[#8b695d]"
         >
           <Cabecera alineacion="left">Mes</Cabecera>
           <Cabecera alineacion="right">
@@ -90,6 +91,7 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
             neto
           </Cabecera>
           <Cabecera alineacion="left">Estado</Cabecera>
+          <Cabecera alineacion="left"> </Cabecera>
         </div>
 
         {filas.map((fila) => (
@@ -98,8 +100,8 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
             role="row"
             className={
               fila.esTotal
-                ? "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-[#f7ece7] text-[11px] font-black leading-none text-[#3f2b24]"
-                : "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-white/75 text-[11px] leading-none text-[#4b312b]"
+                ? "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))_2.15rem] bg-[#f7ece7] text-[11px] font-black leading-none text-[#3f2b24]"
+                : "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))_2.15rem] bg-white/75 text-[11px] leading-none text-[#4b312b]"
             }
           >
             <div
@@ -125,6 +127,17 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
             </div>
             <div role="cell" className="flex items-center border border-[#ecdbd5] px-1">
               <CeldaDato valor={fila.aviso ?? fila.estado} alineacion="left" />
+            </div>
+            <div role="cell" className="flex items-center justify-center border border-[#ecdbd5] px-0.5">
+              {onVerMes && fila.id.startsWith("mes-") ? (
+                <button
+                  type="button"
+                  className="rounded-[6px] border border-[#d1b1a2] bg-white px-1 py-0.5 text-[10px] font-black leading-none text-[#4b2f27]"
+                  onClick={() => onVerMes(Number(fila.id.slice(4)))}
+                >
+                  Ver
+                </button>
+              ) : null}
             </div>
           </div>
         ))}
