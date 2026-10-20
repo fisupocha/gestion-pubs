@@ -200,24 +200,7 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
 
     void import("@/modules/punteo-banco/acceso-oficial")
       .then(async (acceso) => {
-        const leidos = await Promise.all(
-          Array.from({ length: 12 }, (_, indice) =>
-            acceso.leerResumenTpvMes(banco, anio, indice + 1).then(
-              (resumen): MesTpvOficial => ({
-                mes: indice + 1,
-                ingresosCentimos: resumen.ingresosCentimos,
-                comisionesCentimos: resumen.comisionesCentimos,
-                incompleto: resumen.incompleto,
-              }),
-              (): MesTpvOficial => ({
-                mes: indice + 1,
-                ingresosCentimos: 0,
-                comisionesCentimos: 0,
-                incompleto: true,
-              })
-            )
-          )
-        );
+        const leidos = await acceso.leerResumenTpvAnio(banco, anio);
 
         if (vivo) {
           setMeses(leidos);

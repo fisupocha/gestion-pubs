@@ -3,7 +3,8 @@ import { exigirConexionPunteo } from "./conexion-punteo";
 import { lineasOficiales } from "./linea-oficial";
 import { mensajeErrorSeguro, type ResultadoOficial } from "./mensajes-importacion";
 import { identificarExcel } from "./importacion-doble";
-import { decisionPaginaTpv, sumarImportesTpv, TAMANO_PAGINA_TPV } from "./paginacion-tpv";
+import { decisionPaginaTpv, sumarImportesTpv, TAMANO_PAGINA_TPV, type MesTpvOficial } from "./paginacion-tpv";
+import { asignarDevolucionCentimos, type LineaReparto } from "./reparto-abono-comision";
 import type { BancoPunteoId, EstadoOk } from "./modelo";
 import { CLASES_VISIBLES_TABLA, type ClaseMovimiento, type MovimientoInterno } from "./movimiento-interno";
 
@@ -277,6 +278,96 @@ export async function leerResumenTpvMes(
   }
 
   return { ingresosCentimos: 0, comisionesCentimos: 0, incompleto: true };
+}
+
+const CLASES_RESUMEN_ANIO = ["tpv-ingreso", "tpv-comision", "tpv-devolucion"] as const;
+
+export async function leerResumenTpvAnio(banco: BancoPunteoId, anio: number): Promise<MesTpvOficial[]> {
+  exigirConexionPunteo();
+  const lineas: LineaReparto[] = [];
+  let cursor = 0;
+  let completo = false;
+
+  for (let pagina = 0; pagina < 500; pagina += 1) {
+    const { data, error } = await supabase
+      .from("punteo_movimientos")
+      .select("id, fecha_operacion, fecha_valor, importe_centimos, clase, concepto_original, detalles_originales")
+      .eq("banco", banco)
+      .eq("vigente", true)
+      .in("clase", [...CLASES_RESUMEN_ANIO])
+      .gte("fecha_operacion", `${anio}-01-01`)
+      .lte("fecha_operacion", `${anio}-12-31`)
+      .order("orden_banco", { ascending: true })
+      .order("id", { ascending: true })
+      .range(cursor, cursor + TAMANO_PAGINA_TPV - 1);
+
+    const recibidas = error ? 0 : (data?.length ?? 0);
+    if (decisionPaginaTpv(recibidas, TAMANO_PAGINA_TPV, Boolean(error)) === "incompleta") {
+      return Array.from({ length: 12 }, (_, indice) => ({
+        mes: indice + 1,
+        ingresosCentimos: 0,
+        comisionesCentimos: 0,
+        comisionesOriginalesCentimos: 0,
+        devolucionAsignadaCentimos: 0,
+        incompleto: true,
+      }));
+    }
+
+    for (const fila of data ?? []) {
+      lineas.push({
+        id: String(fila.id),
+        fecha: String(fila.fecha_operacion),
+        fechaValor: fila.fecha_valor ? String(fila.fecha_valor) : "",
+        centimos: Number(fila.importe_centimos),
+        clase: String(fila.clase),
+        conceptoOriginal: String(fila.concepto_original ?? ""),
+        detallesOriginales: String(fila.detalles_originales ?? ""),
+      });
+    }
+
+    if (recibidas < TAMANO_PAGINA_TPV) {
+      completo = true;
+      break;
+    }
+
+    cursor += TAMANO_PAGINA_TPV;
+  }
+
+  if (!completo) {
+    return Array.from({ length: 12 }, (_, indice) => ({
+      mes: indice + 1,
+      ingresosCentimos: 0,
+      comisionesCentimos: 0,
+      comisionesOriginalesCentimos: 0,
+      devolucionAsignadaCentimos: 0,
+      incompleto: true,
+    }));
+  }
+
+  const asignacion = asignarDevolucionCentimos(lineas);
+  return Array.from({ length: 12 }, (_, indice) => {
+    const mes = indice + 1;
+    const prefijo = `${anio}-${String(mes).padStart(2, "0")}`;
+    const delMes = lineas.filter((linea) => linea.fecha.startsWith(prefijo));
+    const ingresosCentimos = delMes
+      .filter((linea) => linea.clase === "tpv-ingreso")
+      .reduce((total, linea) => total + linea.centimos, 0);
+    const comisionesOriginalesCentimos = delMes
+      .filter((linea) => linea.clase === "tpv-comision")
+      .reduce((total, linea) => total + linea.centimos, 0);
+    const devolucionAsignadaCentimos = delMes
+      .filter((linea) => linea.clase === "tpv-comision")
+      .reduce((total, linea) => total + (asignacion.get(linea.id) ?? 0), 0);
+
+    return {
+      mes,
+      ingresosCentimos,
+      comisionesOriginalesCentimos,
+      devolucionAsignadaCentimos,
+      comisionesCentimos: comisionesOriginalesCentimos + devolucionAsignadaCentimos,
+      incompleto: false,
+    };
+  });
 }
 
 export async function confirmarCargaHistorica(opciones: {

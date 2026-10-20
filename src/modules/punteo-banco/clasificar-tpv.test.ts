@@ -233,6 +233,50 @@ test("Ibercaja reconoce FACT.TPV y COMI.TPV sin depender del puesto", () => {
   assert.equal(soloComision.length, 1);
 });
 
+test("un FACT.TPV negativo solo es comisión si tiene la liquidación positiva del mismo terminal y fecha valor", () => {
+  const pareja = clasificarSecuenciaTpv([
+    movimiento({
+      id: "venta",
+      banco: "ibercaja",
+      fecha: "2026-04-27",
+      fechaValor: "2026-04-25",
+      importe: 62.5,
+      saldo: 100,
+      conceptoOriginal: "COMPRAS CON TARJETA IBERCAJA",
+      detallesOriginales: "FACT.TPV S102697242",
+      clase: "tpv-ingreso",
+    }),
+    movimiento({
+      id: "cargo",
+      banco: "ibercaja",
+      fecha: "2026-04-27",
+      fechaValor: "2026-04-25",
+      importe: -0.9,
+      saldo: 99.1,
+      conceptoOriginal: "COMPRAS CON TARJETA IBERCAJA",
+      detallesOriginales: "FACT.TPV S102697242",
+      clase: "pendiente-clasificacion",
+    }),
+  ]);
+  const suelto = clasificarSecuenciaTpv([
+    movimiento({
+      id: "suelto",
+      banco: "ibercaja",
+      fecha: "2026-06-01",
+      fechaValor: "2026-06-01",
+      importe: -1,
+      saldo: 10,
+      conceptoOriginal: "COMPRAS CON TARJETA IBERCAJA",
+      detallesOriginales: "FACT.TPV S102697242",
+      clase: "pendiente-clasificacion",
+    }),
+  ]);
+
+  assert.equal(pareja[1]?.clase, "tpv-comision");
+  assert.equal(suelto[0]?.clase, "pendiente-clasificacion");
+  assert.equal(clasificarMovimiento("ABONO PARCIAL LIQUIDACIONES TPV", "", 66.25), "tpv-devolucion");
+});
+
 test("el lector guarda las referencias de ambos bancos y no usa la fecha valor como mes", () => {
   const caixa = libro(
     [

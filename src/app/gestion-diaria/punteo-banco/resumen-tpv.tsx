@@ -61,23 +61,33 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
       >
         <div
           role="row"
-          className="grid grid-cols-[5.75rem_repeat(4,minmax(0,1fr))] bg-[#f7ece7] text-[11px] font-black uppercase tracking-[0.03em] text-[#8b695d]"
+          className="grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-[#f7ece7] text-[10px] font-black uppercase tracking-[0.02em] text-[#8b695d]"
         >
           <Cabecera alineacion="left">Mes</Cabecera>
           <Cabecera alineacion="right">
-            Ingresos
+            Ventas
             <br />
             TPV
           </Cabecera>
           <Cabecera alineacion="right">
-            Comisiones
+            Comisión
             <br />
-            TPV
+            original
           </Cabecera>
           <Cabecera alineacion="right">
-            Porcentaje
+            Devolución
             <br />
-            efectivo
+            asignada
+          </Cabecera>
+          <Cabecera alineacion="right">
+            Comisión
+            <br />
+            neta
+          </Cabecera>
+          <Cabecera alineacion="right">
+            %
+            <br />
+            neto
           </Cabecera>
           <Cabecera alineacion="left">Estado</Cabecera>
         </div>
@@ -88,8 +98,8 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
             role="row"
             className={
               fila.esTotal
-                ? "grid grid-cols-[5.75rem_repeat(4,minmax(0,1fr))] bg-[#f7ece7] text-sm font-black leading-none text-[#3f2b24]"
-                : "grid grid-cols-[5.75rem_repeat(4,minmax(0,1fr))] bg-white/75 text-sm leading-none text-[#4b312b]"
+                ? "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-[#f7ece7] text-[11px] font-black leading-none text-[#3f2b24]"
+                : "grid grid-cols-[3.6rem_repeat(6,minmax(0,1fr))] bg-white/75 text-[11px] leading-none text-[#4b312b]"
             }
           >
             <div
@@ -100,6 +110,12 @@ export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
             </div>
             <div role="cell" className="flex items-center justify-end border border-[#ecdbd5] px-1">
               <CeldaDato valor={fila.ingresos} alineacion="right" />
+            </div>
+            <div role="cell" className="flex items-center justify-end border border-[#ecdbd5] px-1">
+              <CeldaDato valor={fila.comisionOriginal} alineacion="right" />
+            </div>
+            <div role="cell" className="flex items-center justify-end border border-[#ecdbd5] px-1">
+              <CeldaDato valor={fila.devolucionAsignada} alineacion="right" />
             </div>
             <div role="cell" className="flex items-center justify-end border border-[#ecdbd5] px-1">
               <CeldaDato valor={fila.comisiones} alineacion="right" />

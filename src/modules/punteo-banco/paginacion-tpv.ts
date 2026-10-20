@@ -14,7 +14,10 @@ export type SumaTpv = {
 export type MesTpvOficial = {
   mes: number;
   ingresosCentimos: number;
+  /** Comisión neta del mes. Si no hay desglose, coincide con la original. */
   comisionesCentimos: number;
+  comisionesOriginalesCentimos?: number;
+  devolucionAsignadaCentimos?: number;
   incompleto: boolean;
 };
 
@@ -65,6 +68,8 @@ export function presentarTpvOficial(meses: MesTpvOficial[]): FilaResumenTpv[] {
         mes: "Total",
         ingresos: null,
         comisiones: null,
+        comisionOriginal: null,
+        devolucionAsignada: null,
         porcentajeEfectivo: null,
         estado: null,
         aviso: algunoIncompleto ? "Incompleto" : null,
@@ -82,6 +87,8 @@ export function presentarTpvOficial(meses: MesTpvOficial[]): FilaResumenTpv[] {
       id: "total",
       mes: "Total",
       ingresos: formatearCentimos(ingresos),
+      comisionOriginal: formatearCentimos(meses.reduce((total, mes) => total + (mes.comisionesOriginalesCentimos ?? mes.comisionesCentimos), 0)),
+      devolucionAsignada: formatearCentimos(meses.reduce((total, mes) => total + (mes.devolucionAsignadaCentimos ?? 0), 0)),
       comisiones: formatearCentimos(comisiones),
       porcentajeEfectivo: porcentaje(ingresos, comisiones),
       estado: null,
@@ -101,19 +108,25 @@ function filaDeMes(numero: number, mes: MesTpvOficial | undefined): FilaResumenT
       mes: MESES_PUNTEO[numero - 1],
       ingresos: null,
       comisiones: null,
+      comisionOriginal: null,
+      devolucionAsignada: null,
       porcentajeEfectivo: null,
       estado: null,
       aviso: mes?.incompleto ? "Incompleto" : null,
     };
   }
 
-  const hayCifras = mes.ingresosCentimos !== 0 || mes.comisionesCentimos !== 0;
+  const original = mes.comisionesOriginalesCentimos ?? mes.comisionesCentimos;
+  const devolucion = mes.devolucionAsignadaCentimos ?? 0;
+  const hayCifras = mes.ingresosCentimos !== 0 || mes.comisionesCentimos !== 0 || original !== 0 || devolucion !== 0;
   const estado: EstadoMesTpv | null = mes.comisionesCentimos !== 0 ? "Sin autorizar" : null;
 
   return {
     id: `mes-${numero}`,
     mes: MESES_PUNTEO[numero - 1],
     ingresos: hayCifras ? formatearCentimos(mes.ingresosCentimos) : null,
+    comisionOriginal: hayCifras ? formatearCentimos(original) : null,
+    devolucionAsignada: hayCifras ? formatearCentimos(devolucion) : null,
     comisiones: hayCifras ? formatearCentimos(mes.comisionesCentimos) : null,
     porcentajeEfectivo: hayCifras ? porcentaje(mes.ingresosCentimos, mes.comisionesCentimos) : null,
     estado,

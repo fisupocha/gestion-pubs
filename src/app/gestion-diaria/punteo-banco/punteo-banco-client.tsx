@@ -536,7 +536,7 @@ export function PunteoBancoClient() {
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-1.5 min-[1280px]:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)] min-[1280px]:grid-rows-1">
+          <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-1.5 min-[1280px]:grid-cols-[minmax(0,3fr)_minmax(34rem,1.3fr)] min-[1280px]:grid-rows-1">
             <div className="flex min-h-0 min-w-0 flex-col gap-1.5">
               {conexionPunteoActiva() ? (
                 <ReferenciaRegistrada modo="oficial" ultimo={modo.ultimo} cargando={modo.cargandoUltimo} />

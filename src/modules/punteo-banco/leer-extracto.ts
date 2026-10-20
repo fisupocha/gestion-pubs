@@ -7,7 +7,7 @@ import {
   normalizarTexto,
   textoCelda,
 } from "./celdas";
-import { clasificarMovimiento, codigosTpvEnTexto } from "./clasificar-movimiento";
+import { clasificarMovimiento, clasificarSecuenciaTpv, codigosTpvEnTexto } from "./clasificar-movimiento";
 import { aliasesFechaOperacion, aliasesFechaValor } from "./fechas-movimiento";
 import type { BancoPunteoId } from "./modelo";
 import type { MovimientoInterno } from "./movimiento-interno";
@@ -84,7 +84,9 @@ export function leerExtracto(
   }
 
   const columnas = mapearColumnas(mejor.matriz[mejor.fila] ?? [], mejor.banco);
-  const movimientos = construirMovimientos(mejor.matriz, mejor.fila, columnas, mejor.banco, nombreArchivo);
+  const movimientos = clasificarSecuenciaTpv(
+    construirMovimientos(mejor.matriz, mejor.fila, columnas, mejor.banco, nombreArchivo)
+  );
 
   if (movimientos.length === 0) {
     return { ok: false, motivo: "sin-movimientos", bancoDetectado: mejor.banco };

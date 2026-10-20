@@ -63,7 +63,10 @@ export type FilaResumenTpv = {
   id: string;
   mes: string;
   ingresos: string | null;
+  /** Comisión neta: la cobrada menos la devolución asignada a ese mes. */
   comisiones: string | null;
+  comisionOriginal: string | null;
+  devolucionAsignada: string | null;
   porcentajeEfectivo: string | null;
   estado: EstadoMesTpv | null;
   /** Texto de la celda de estado cuando la cifra no puede ofrecerse como definitiva. */
@@ -125,6 +128,8 @@ export function filasTpvSinDatos(): FilaResumenTpv[] {
       mes,
       ingresos: null,
       comisiones: null,
+      comisionOriginal: null,
+      devolucionAsignada: null,
       porcentajeEfectivo: null,
       estado: null,
     })),
@@ -133,6 +138,8 @@ export function filasTpvSinDatos(): FilaResumenTpv[] {
       mes: "Total",
       ingresos: null,
       comisiones: null,
+      comisionOriginal: null,
+      devolucionAsignada: null,
       porcentajeEfectivo: null,
       estado: null,
       esTotal: true,

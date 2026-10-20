@@ -1,7 +1,8 @@
-import { formatearImporte, redondear } from "./celdas";
+import { aCentimos, desdeCentimos, formatearCentimos } from "./centimos";
 import type { BancoPunteoId, EstadoMesTpv, FilaResumenTpv } from "./modelo";
 import { MESES_PUNTEO } from "./modelo";
 import type { MovimientoInterno, PeriodoBanco } from "./movimiento-interno";
+import { asignarDevolucionCentimos, lineasRepartoDesdeImportes } from "./reparto-abono-comision";
 
 export type ClaveGastoTpv = {
   banco: BancoPunteoId;
@@ -11,8 +12,10 @@ export type ClaveGastoTpv = {
 
 type ResumenMes = {
   mes: number;
-  ingresos: number | null;
-  comisiones: number | null;
+  ingresosCentimos: number | null;
+  originalCentimos: number | null;
+  devolucionCentimos: number | null;
+  netaCentimos: number | null;
   estado: EstadoMesTpv | null;
 };
 
@@ -26,25 +29,32 @@ export function resumirTpvAnual(opciones: {
   gastosRegistrados: ClaveGastoTpv[];
   hayHistorico: boolean;
 }): FilaResumenTpv[] {
+  const asignacion = asignarDevolucionCentimos(lineasRepartoDesdeImportes(opciones.movimientos));
   const meses = Array.from({ length: 12 }, (_, indice) =>
-    resumirMes({ ...opciones, mes: indice + 1 })
+    resumirMes({ ...opciones, mes: indice + 1, asignacion })
   );
-  const conDatos = meses.filter((mes) => mes.ingresos !== null || mes.comisiones !== null);
+  const conDatos = meses.filter((mes) => mes.ingresosCentimos !== null || mes.netaCentimos !== null);
   const ingresos = conDatos.length
-    ? redondear(conDatos.reduce((total, mes) => total + (mes.ingresos ?? 0), 0))
+    ? conDatos.reduce((total, mes) => total + (mes.ingresosCentimos ?? 0), 0)
     : null;
-  const comisiones = conDatos.length
-    ? redondear(conDatos.reduce((total, mes) => total + (mes.comisiones ?? 0), 0))
+  const original = conDatos.length
+    ? conDatos.reduce((total, mes) => total + (mes.originalCentimos ?? 0), 0)
     : null;
+  const devolucion = conDatos.length
+    ? conDatos.reduce((total, mes) => total + (mes.devolucionCentimos ?? 0), 0)
+    : null;
+  const neta = conDatos.length ? conDatos.reduce((total, mes) => total + (mes.netaCentimos ?? 0), 0) : null;
 
   return [
     ...meses.map((mes) => filaMes(mes)),
     {
       id: "total",
       mes: "Total",
-      ingresos: ingresos === null ? null : formatearImporte(ingresos),
-      comisiones: comisiones === null ? null : formatearImporte(comisiones),
-      porcentajeEfectivo: porcentaje(ingresos, comisiones),
+      ingresos: ingresos === null ? null : formatearCentimos(ingresos),
+      comisionOriginal: original === null ? null : formatearCentimos(original),
+      devolucionAsignada: devolucion === null ? null : formatearCentimos(devolucion),
+      comisiones: neta === null ? null : formatearCentimos(neta),
+      porcentajeEfectivo: porcentaje(ingresos, neta),
       estado: null,
       esTotal: true,
     },
@@ -61,6 +71,7 @@ function resumirMes(opciones: {
   hoy: string;
   gastosRegistrados: ClaveGastoTpv[];
   hayHistorico: boolean;
+  asignacion: Map<string, number>;
 }): ResumenMes {
   const delMes = opciones.movimientos.filter(
     (movimiento) =>
@@ -70,26 +81,32 @@ function resumirMes(opciones: {
       numeroMes(movimiento.fecha) === opciones.mes &&
       (movimiento.clase === "tpv-ingreso" || movimiento.clase === "tpv-comision")
   );
-  const ingresos = delMes.some((movimiento) => movimiento.clase === "tpv-ingreso")
-    ? redondear(
-        delMes
-          .filter((movimiento) => movimiento.clase === "tpv-ingreso")
-          .reduce((total, movimiento) => total + movimiento.importe, 0)
-      )
+  const hayIngresos = delMes.some((movimiento) => movimiento.clase === "tpv-ingreso");
+  const hayComisiones = delMes.some((movimiento) => movimiento.clase === "tpv-comision");
+  const ingresosCentimos = hayIngresos
+    ? delMes
+        .filter((movimiento) => movimiento.clase === "tpv-ingreso")
+        .reduce((total, movimiento) => total + aCentimos(movimiento.importe), 0)
     : null;
-  const comisiones = delMes.some((movimiento) => movimiento.clase === "tpv-comision")
-    ? redondear(
-        delMes
-          .filter((movimiento) => movimiento.clase === "tpv-comision")
-          .reduce((total, movimiento) => total + movimiento.importe, 0)
-      )
+  const originalCentimos = hayComisiones
+    ? delMes
+        .filter((movimiento) => movimiento.clase === "tpv-comision")
+        .reduce((total, movimiento) => total + aCentimos(movimiento.importe), 0)
     : null;
+  const devolucionCentimos = delMes
+    .filter((movimiento) => movimiento.clase === "tpv-comision")
+    .reduce((total, movimiento) => total + (opciones.asignacion.get(movimiento.id) ?? 0), 0);
+  const hayDevolucion = devolucionCentimos !== 0;
+  const netaCentimos =
+    originalCentimos === null && !hayDevolucion ? null : (originalCentimos ?? 0) + devolucionCentimos;
 
   return {
     mes: opciones.mes,
-    ingresos,
-    comisiones,
-    estado: estadoMes(opciones, comisiones),
+    ingresosCentimos,
+    originalCentimos: originalCentimos === null && !hayDevolucion ? null : (originalCentimos ?? 0),
+    devolucionCentimos: netaCentimos === null ? null : devolucionCentimos,
+    netaCentimos,
+    estado: estadoMes(opciones, netaCentimos),
   };
 }
 
@@ -111,7 +128,7 @@ export function comisionTpvDelMes(
     return null;
   }
 
-  return redondear(delMes.reduce((total, movimiento) => total + movimiento.importe, 0));
+  return desdeCentimos(delMes.reduce((total, movimiento) => total + aCentimos(movimiento.importe), 0));
 }
 
 function estadoMes(
@@ -126,7 +143,7 @@ function estadoMes(
     gastosRegistrados: ClaveGastoTpv[];
     hayHistorico: boolean;
   },
-  comisiones: number | null
+  netaCentimos: number | null
 ): EstadoMesTpv | null {
   if (!opciones.hayHistorico) {
     return null;
@@ -175,7 +192,7 @@ function estadoMes(
     return "Pendiente de completar";
   }
 
-  if (comisiones === null || comisiones === 0) {
+  if (netaCentimos === null || netaCentimos === 0) {
     return null;
   }
 
@@ -218,19 +235,22 @@ function filaMes(mes: ResumenMes): FilaResumenTpv {
   return {
     id: `mes-${mes.mes}`,
     mes: MESES_PUNTEO[mes.mes - 1],
-    ingresos: mes.ingresos === null ? null : formatearImporte(mes.ingresos),
-    comisiones: mes.comisiones === null ? null : formatearImporte(mes.comisiones),
-    porcentajeEfectivo: porcentaje(mes.ingresos, mes.comisiones),
+    ingresos: mes.ingresosCentimos === null ? null : formatearCentimos(mes.ingresosCentimos),
+    comisionOriginal: mes.originalCentimos === null ? null : formatearCentimos(mes.originalCentimos),
+    devolucionAsignada: mes.devolucionCentimos === null ? null : formatearCentimos(mes.devolucionCentimos),
+    comisiones: mes.netaCentimos === null ? null : formatearCentimos(mes.netaCentimos),
+    porcentajeEfectivo: porcentaje(mes.ingresosCentimos, mes.netaCentimos),
     estado: mes.estado,
   };
 }
 
-function porcentaje(ingresos: number | null, comisiones: number | null) {
-  if (ingresos === null || comisiones === null || ingresos <= 0) {
+function porcentaje(ingresosCentimos: number | null, netaCentimos: number | null) {
+  if (ingresosCentimos === null || netaCentimos === null || ingresosCentimos <= 0) {
     return null;
   }
 
-  return `${formatearImporte(redondear((Math.abs(comisiones) / ingresos) * 100))} %`;
+  const centesimas = Math.round((Math.abs(netaCentimos) * 10000) / ingresosCentimos);
+  return `${formatearCentimos(centesimas)} %`;
 }
 
 function numeroAnio(iso: string) {

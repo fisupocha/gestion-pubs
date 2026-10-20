@@ -25,7 +25,7 @@ export function clasificarMovimiento(concepto: string, detalles: string, importe
   }
 
   if (texto.includes("abono parcial liquidaciones tpv")) {
-    return "pendiente-clasificacion";
+    return importe !== undefined && importe > 0 ? "tpv-devolucion" : "pendiente-clasificacion";
   }
 
   if (comisionCaixa) {
@@ -83,17 +83,55 @@ export function clasificarMovimiento(concepto: string, detalles: string, importe
 type MovimientoClasificable = {
   conceptoOriginal: string;
   detallesOriginales: string;
+  fechaValor?: string;
   importe?: number;
   clase: ClaseMovimiento;
 };
 
+export function terminalFactTpv(concepto: string, detalles: string) {
+  const encontrado = `${concepto} ${detalles}`.match(/FACT\s*\.\s*TPV\s+(\S+)/i);
+  return encontrado?.[1] ?? "";
+}
+
+export function esFactTpv(concepto: string, detalles: string) {
+  return PATRON_FACT.test(`${concepto} ${detalles}`);
+}
+
 /**
- * No promociona una C. genérica por ir detrás de un ON.
- * La clase ya viene decidida por clasificarMovimiento.
- * No crea apuntes.
+ * Un FACT.TPV negativo solo pasa a comisión si hay una liquidación positiva
+ * del mismo terminal y la misma fecha valor. Si no hay esa pareja, sigue pendiente.
+ * No usa el porcentaje. No promociona una C. genérica por ir detrás de un ON.
+ * No crea apuntes ni cambia importes.
  */
 export function clasificarSecuenciaTpv<T extends MovimientoClasificable>(movimientos: T[]): T[] {
-  return movimientos.map((movimiento) => ({ ...movimiento }));
+  const liquidacionesPositivas = new Set<string>();
+
+  for (const movimiento of movimientos) {
+    const terminal = terminalFactTpv(movimiento.conceptoOriginal, movimiento.detallesOriginales);
+    if (!terminal || !movimiento.fechaValor || (movimiento.importe ?? 0) <= 0) {
+      continue;
+    }
+    if (!esFactTpv(movimiento.conceptoOriginal, movimiento.detallesOriginales)) {
+      continue;
+    }
+    liquidacionesPositivas.add(`${movimiento.fechaValor}|${terminal}`);
+  }
+
+  return movimientos.map((movimiento) => {
+    const terminal = terminalFactTpv(movimiento.conceptoOriginal, movimiento.detallesOriginales);
+    const pareja = `${movimiento.fechaValor ?? ""}|${terminal}`;
+    if (
+      terminal &&
+      movimiento.fechaValor &&
+      (movimiento.importe ?? 0) < 0 &&
+      esFactTpv(movimiento.conceptoOriginal, movimiento.detallesOriginales) &&
+      liquidacionesPositivas.has(pareja)
+    ) {
+      return { ...movimiento, clase: "tpv-comision" as const };
+    }
+
+    return { ...movimiento };
+  });
 }
 
 export function codigosTpvEnTexto(concepto: string, detalles: string) {
