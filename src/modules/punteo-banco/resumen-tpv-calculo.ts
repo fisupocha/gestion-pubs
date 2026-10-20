@@ -179,7 +179,7 @@ function estadoMes(
     return null;
   }
 
-  return "Guardar";
+  return "Sin autorizar";
 }
 
 function primerDiaCubierto(periodos: PeriodoBanco[], huecos: PeriodoBanco[], banco: BancoPunteoId) {

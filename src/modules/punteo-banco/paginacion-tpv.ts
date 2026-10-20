@@ -108,7 +108,7 @@ function filaDeMes(numero: number, mes: MesTpvOficial | undefined): FilaResumenT
   }
 
   const hayCifras = mes.ingresosCentimos !== 0 || mes.comisionesCentimos !== 0;
-  const estado: EstadoMesTpv | null = mes.comisionesCentimos !== 0 ? "Guardar" : null;
+  const estado: EstadoMesTpv | null = mes.comisionesCentimos !== 0 ? "Sin autorizar" : null;
 
   return {
     id: `mes-${numero}`,

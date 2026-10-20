@@ -1,3 +1,4 @@
+import { clasificarMovimiento } from "./clasificar-movimiento";
 import { ordenarPorCadena } from "./continuidad-saldo";
 import type { BancoPunteoId } from "./modelo";
 import type { MovimientoInterno } from "./movimiento-interno";
@@ -40,8 +41,13 @@ export function prepararCargaOficial(banco: BancoPunteoId, movimientos: Movimien
     );
   }
 
-  const historico = orden.secuencia.filter((movimiento) => movimiento.fecha <= FECHA_CORTE_HISTORICO);
-  const ordinario = orden.secuencia.filter((movimiento) => movimiento.fecha > FECHA_CORTE_HISTORICO);
+  const secuencia = orden.secuencia.map((movimiento) => ({
+    ...movimiento,
+    clase: clasificarMovimiento(movimiento.conceptoOriginal, movimiento.detallesOriginales, movimiento.importe),
+    ok: "pendiente" as const,
+  }));
+  const historico = secuencia.filter((movimiento) => movimiento.fecha <= FECHA_CORTE_HISTORICO);
+  const ordinario = secuencia.filter((movimiento) => movimiento.fecha > FECHA_CORTE_HISTORICO);
   const llamadas: LlamadaCarga[] = [];
 
   if (historico.length > 0) {

@@ -129,7 +129,6 @@ export function PunteoBancoClient() {
     importarArchivo,
     confirmarImportacion,
     cancelarImportacion,
-    textoGastoMes,
   } = archivadorPunteo;
   const modo = useModoOficial(bancoId, anio);
   const hoy = useMemo(() => hoyLocal(), []);
@@ -603,13 +602,7 @@ export function PunteoBancoClient() {
                 ) : null}
               </div>
             </div>
-            <ResumenTpv
-              anio={anio}
-              filas={filasTpv}
-              onGuardarMes={(mes) =>
-                publicar(conexionPunteoActiva() ? modo.avisarGasto(mes) : textoGastoMes(bancoId, anio, mes))
-              }
-            />
+            <ResumenTpv anio={anio} filas={filasTpv} />
           </div>
         </div>
       )}

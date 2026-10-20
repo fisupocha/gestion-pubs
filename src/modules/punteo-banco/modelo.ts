@@ -29,7 +29,7 @@ export const MESES_PUNTEO = [
 export const ESTADOS_MES_TPV = [
   "Mes en curso",
   "Pendiente de completar",
-  "Guardar",
+  "Sin autorizar",
   "Guardado",
 ] as const;
 

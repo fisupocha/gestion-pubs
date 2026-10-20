@@ -22,7 +22,7 @@ import {
   type BorradorObservacion,
 } from "@/modules/punteo-banco/observacion-borrador";
 import { TAMANO_BLOQUE, unirBloque } from "@/modules/punteo-banco/bloques-lista";
-import { mesTpvUtilizable, type MesTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
+import type { MesTpvOficial } from "@/modules/punteo-banco/paginacion-tpv";
 import { prepararCargaOficial, type PlanCargaOficial } from "@/modules/punteo-banco/preparar-carga-oficial";
 import type { AvisoPunteo } from "./use-archivador-punteo";
 
@@ -633,25 +633,6 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     }
   }, [banco, incertidumbre, preview]);
 
-  const avisarGasto = useCallback(
-    (mes: number): AvisoPunteo => {
-      const resumen = meses.find((actual) => actual.mes === mes);
-
-      if (!mesTpvUtilizable(resumen)) {
-        return {
-          tono: "error",
-          texto: "El resumen TPV de este mes está incompleto. No se puede usar para crear un gasto.",
-        };
-      }
-
-      return {
-        tono: "info",
-        texto: "El resumen de este mes está completo, pero Guardar TPV no está conectado con Gastos bancarios. No se ha creado ningún gasto.",
-      };
-    },
-    [meses]
-  );
-
   const cargarMas = useCallback(async () => {
     if (!conexionPunteoActiva() || cargandoRef.current || !hayMasRef.current) {
       return;
@@ -753,7 +734,6 @@ export function useModoOficial(banco: BancoPunteoId, anio: number) {
     confirmarEstado,
     confirmarObservacion,
     guardarNotasPendientes,
-    avisarGasto,
   };
 }
 

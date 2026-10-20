@@ -106,7 +106,7 @@ test("normaliza fechas e importes europeos y separa normales, TPV y cuotas", () 
       ["Ibercaja"],
       ["Fecha operación", "Fecha valor", "Concepto", "Importe", "Saldo disponible"],
       ["15/03/2031", "16/03/2031", "Abono TPV tienda", "1.234,50", "5.000,00"],
-      ["15/03/2031", "16/03/2031", "Comisión TPV", "-12,30", "4.987,70"],
+      ["15/03/2031", "16/03/2031", "COMI.TPV X203100001", "-12,30", "4.987,70"],
       ["15/03/2031", "16/03/2031", "Mantenimiento TPV", "-6,00", "4.981,70"],
       ["15/03/2031", "16/03/2031", "Devolución TPV", "-4,00", "4.977,70"],
       ["15/03/2031", "16/03/2031", "TPV sin detalle", "8,00", "4.985,70"],
@@ -279,7 +279,7 @@ test("calcula el resumen mensual y anual sin mezclar mantenimiento ni devolucion
   assert.equal(marzo?.comisiones, "-5,00");
   assert.equal(marzo?.ingresos, "200,00");
   assert.equal(marzo?.porcentajeEfectivo, "2,50 %");
-  assert.equal(marzo?.estado, "Guardar");
+  assert.equal(marzo?.estado, "Sin autorizar");
   assert.equal(abril?.ingresos, "50,00");
   assert.equal(abril?.estado, "Pendiente de completar");
   assert.equal(total?.ingresos, "250,00");

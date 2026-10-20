@@ -42,7 +42,7 @@ function movimiento(
 test("CaixaBank reconoce ON y C. en Movimiento o en Más datos", () => {
   assert.equal(clasificarMovimiento("ON 203103310001", ""), "tpv-ingreso");
   assert.equal(clasificarMovimiento("Traspaso", "ON203103310001"), "tpv-ingreso");
-  assert.equal(clasificarMovimiento("C. ON 203103310001", ""), "tpv-comision");
+  assert.equal(clasificarMovimiento("C. ON 203103310001", ""), "pendiente-clasificacion");
   assert.equal(clasificarMovimiento("C. 203103310001", ""), "pendiente-clasificacion");
   assert.equal(clasificarMovimiento("Comisión mantenimiento cuenta", ""), "normal");
   assert.equal(clasificarMovimiento("C.C. 203103310001", ""), "normal");
@@ -72,7 +72,7 @@ test("CaixaBank reconoce ON y C. en Movimiento o en Más datos", () => {
 
   assert.deepEqual(
     secuencia.map((fila) => fila.clase),
-    ["tpv-ingreso", "tpv-comision"]
+    ["tpv-ingreso", "pendiente-clasificacion"]
   );
   assert.equal(secuencia[0]?.conceptoOriginal, "Traspaso");
   assert.equal(secuencia[0]?.detallesOriginales, "ON 203103310001");
@@ -81,6 +81,8 @@ test("CaixaBank reconoce ON y C. en Movimiento o en Más datos", () => {
 test("un único cierre reconoce el ingreso ON y la comisión C.", () => {
   assert.equal(clasificarMovimiento("ON 12993-070 3009", ""), "tpv-ingreso");
   assert.equal(clasificarMovimiento("C. 124129933 3009", ""), "pendiente-clasificacion");
+  assert.equal(clasificarMovimiento("C. 124129933 3009", "", -0.11), "tpv-comision");
+  assert.equal(clasificarMovimiento("C. 124129933 3009", "", 0.11), "pendiente-clasificacion");
 
   const secuencia = clasificarSecuenciaTpv([
     movimiento({
@@ -97,7 +99,7 @@ test("un único cierre reconoce el ingreso ON y la comisión C.", () => {
       importe: -0.11,
       saldo: 4.89,
       conceptoOriginal: "C. 124129933 3009",
-      clase: "pendiente-clasificacion",
+      clase: clasificarMovimiento("C. 124129933 3009", "", -0.11),
     }),
   ]);
 
@@ -139,7 +141,7 @@ test("varios cierres consecutivos reconocen los ingresos y las comisiones sin em
         importe: -0.11,
         saldo: 107.39,
         conceptoOriginal: "C. 124129933 3009",
-        clase: "pendiente-clasificacion",
+        clase: clasificarMovimiento("C. 124129933 3009", "", -0.11),
       }),
       movimiento({
         id: "c-2",
@@ -148,7 +150,7 @@ test("varios cierres consecutivos reconocen los ingresos y las comisiones sin em
         importe: -0.26,
         saldo: 107.13,
         conceptoOriginal: "C. 124129933 3009",
-        clase: "pendiente-clasificacion",
+        clase: clasificarMovimiento("C. 124129933 3009", "", -0.26),
       }),
       movimiento({
         id: "nomina",
@@ -210,8 +212,10 @@ test("una comisión C. sin ingreso anterior queda pendiente y no se inventa el p
 });
 
 test("Ibercaja reconoce FACT.TPV y COMI.TPV sin depender del puesto", () => {
-  assert.equal(clasificarMovimiento("FACT.TPV terminal", ""), "tpv-ingreso");
-  assert.equal(clasificarMovimiento("COMI.TPV terminal", ""), "tpv-comision");
+  assert.equal(clasificarMovimiento("FACT.TPV terminal", "", 150), "tpv-ingreso");
+  assert.equal(clasificarMovimiento("FACT.TPV terminal", "", -2), "pendiente-clasificacion");
+  assert.equal(clasificarMovimiento("COMI.TPV terminal", "", -2.5), "tpv-comision");
+  assert.equal(clasificarMovimiento("COMI.TPV terminal", "", 2.5), "pendiente-clasificacion");
 
   const soloComision = clasificarSecuenciaTpv([
     movimiento({
@@ -266,21 +270,21 @@ test("el lector guarda las referencias de ambos bancos y no usa la fecha valor c
 
   assert.equal(plan.estado, "cuadra");
   assert.equal(plan.normales, 1);
-  assert.equal(plan.tpv, 4);
-  assert.equal(plan.pendientes, 1);
+  assert.equal(plan.tpv, 2);
+  assert.equal(plan.pendientes, 3);
   assert.equal(plan.normales + plan.tpv + plan.pendientes, plan.nuevos.length);
   assert.equal(plan.nuevos.length, lecturaCaixa.movimientos.length);
   assert.deepEqual(
     plan.nuevos.map((fila) => fila.clase),
-    ["tpv-ingreso", "tpv-comision", "tpv-ingreso", "tpv-comision", "normal", "pendiente-clasificacion"]
+    ["tpv-ingreso", "pendiente-clasificacion", "tpv-ingreso", "pendiente-clasificacion", "normal", "pendiente-clasificacion"]
   );
   assert.deepEqual(
     plan.nuevos.filter((fila) => esVisibleEnTabla(fila.clase)).map((fila) => fila.conceptoOriginal),
-    ["Nómina", "C. 99999999"]
+    ["Cargo", "C. 203104010009", "Nómina", "C. 99999999"]
   );
   assert.equal(
     plan.nuevos.filter((fila) => esTpvCalculable(fila.clase)).length,
-    4
+    2
   );
 
   const filas = resumirTpvAnual({
@@ -295,9 +299,9 @@ test("el lector guarda las referencias de ambos bancos y no usa la fecha valor c
   });
 
   assert.equal(filas[2]?.ingresos, "80,00");
-  assert.equal(filas[2]?.comisiones, "-1,20");
+  assert.equal(filas[2]?.comisiones, null);
   assert.equal(filas[3]?.ingresos, "40,00");
-  assert.equal(filas[3]?.comisiones, "-0,80");
+  assert.equal(filas[3]?.comisiones, null);
 
   const iber = libro(
     [
@@ -455,7 +459,7 @@ test("un extracto descendente confirma la comisión C. que sigue al ingreso ON",
     plan.nuevos.map((fila) => [fila.conceptoOriginal, fila.clase]),
     [
       ["ON 203104010003", "tpv-ingreso"],
-      ["C. 203104020003", "tpv-comision"],
+      ["C. 203104020003", "pendiente-clasificacion"],
       ["Nómina", "normal"],
     ]
   );

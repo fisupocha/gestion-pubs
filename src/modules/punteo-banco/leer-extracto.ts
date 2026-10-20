@@ -219,7 +219,7 @@ function construirMovimientos(
         .filter((referencia) => referencia.length >= 4),
       ...codigosTpvEnTexto(conceptoOriginal, detallesOriginales),
     ].filter((referencia, indice, lista) => referencia.length >= 4 && lista.indexOf(referencia) === indice);
-    const clase = clasificarMovimiento(conceptoOriginal, detallesOriginales);
+    const clase = clasificarMovimiento(conceptoOriginal, detallesOriginales, importe);
     const clave = [
       banco,
       fecha,

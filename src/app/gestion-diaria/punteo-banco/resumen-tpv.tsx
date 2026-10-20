@@ -7,7 +7,6 @@ import { tarjetaPunteo } from "./clases";
 type ResumenTpvProps = {
   anio: number;
   filas: FilaResumenTpv[];
-  onGuardarMes?: (mes: number) => void;
 };
 
 function CeldaDato({ valor, alineacion }: { valor: string | null; alineacion: "left" | "right" }) {
@@ -45,7 +44,7 @@ function Cabecera({
   );
 }
 
-export function ResumenTpv({ anio, filas, onGuardarMes }: ResumenTpvProps) {
+export function ResumenTpv({ anio, filas }: ResumenTpvProps) {
   return (
     <section
       className={`${tarjetaPunteo} flex h-auto min-w-0 shrink-0 flex-col overflow-visible min-[1280px]:h-full min-[1280px]:overflow-hidden`}
@@ -109,17 +108,7 @@ export function ResumenTpv({ anio, filas, onGuardarMes }: ResumenTpvProps) {
               <CeldaDato valor={fila.porcentajeEfectivo} alineacion="right" />
             </div>
             <div role="cell" className="flex items-center border border-[#ecdbd5] px-1">
-              {fila.estado === "Guardar" && onGuardarMes ? (
-                <button
-                  type="button"
-                  className="text-left text-sm font-black leading-none text-[#4b312b] underline underline-offset-2"
-                  onClick={() => onGuardarMes(Number(fila.id.replace("mes-", "")))}
-                >
-                  Guardar
-                </button>
-              ) : (
-                <CeldaDato valor={fila.aviso ?? fila.estado} alineacion="left" />
-              )}
+              <CeldaDato valor={fila.aviso ?? fila.estado} alineacion="left" />
             </div>
           </div>
         ))}

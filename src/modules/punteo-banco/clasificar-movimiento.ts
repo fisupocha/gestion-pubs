@@ -4,16 +4,18 @@ import type { ClaseMovimiento } from "./movimiento-interno";
 const TOKEN_TPV = /\btpv\b|\bdatafono\b|terminal punto de venta/;
 const PATRON_ON = /(?<![A-Za-z0-9])ON(?![A-Za-z])[\s./:-]*\d{4,}/i;
 const PATRON_C = /(?<![A-Za-z0-9.])C\.(?!\s*C\.)\s*(?:ON(?![A-Za-z])[\s./:-]*)?\d{4,}/i;
-const PATRON_FACT = /fact\s*\.\s*tpv/;
-const PATRON_COMI = /comi\s*\.\s*tpv/;
+const PATRON_COMISION_CAIXA = /^C\. 124129933 \d{4}$/;
+const PATRON_FACT = /fact\s*\.\s*tpv\s+\S+/i;
+const PATRON_COMI = /comi\s*\.\s*tpv\s+\S+/i;
 
-export function clasificarMovimiento(concepto: string, detalles: string): ClaseMovimiento {
+export function clasificarMovimiento(concepto: string, detalles: string, importe?: number): ClaseMovimiento {
   const crudo = `${concepto} ${detalles}`;
   const texto = normalizarTexto(crudo);
   const ingresoOn = PATRON_ON.test(crudo);
+  const comisionCaixa = [concepto, detalles].some((campo) => PATRON_COMISION_CAIXA.test(campo.trim()));
   const comisionEstructurada = PATRON_C.test(crudo);
-  const factTpv = PATRON_FACT.test(texto);
-  const comiTpv = PATRON_COMI.test(texto);
+  const factTpv = PATRON_FACT.test(crudo);
+  const comiTpv = PATRON_COMI.test(crudo);
 
   if (
     /devoluc|retroces|chargeback|contracargo/.test(texto) &&
@@ -22,12 +24,24 @@ export function clasificarMovimiento(concepto: string, detalles: string): ClaseM
     return "tpv-devolucion";
   }
 
+  if (texto.includes("abono parcial liquidaciones tpv")) {
+    return "pendiente-clasificacion";
+  }
+
+  if (comisionCaixa) {
+    return importe !== undefined && importe < 0 ? "tpv-comision" : "pendiente-clasificacion";
+  }
+
+  if (texto.includes("serv.tpv.mant")) {
+    return "tpv-mantenimiento";
+  }
+
   if (comiTpv) {
-    return "tpv-comision";
+    return importe !== undefined && importe < 0 ? "tpv-comision" : "pendiente-clasificacion";
   }
 
   if (factTpv) {
-    return "tpv-ingreso";
+    return importe !== undefined && importe <= 0 ? "pendiente-clasificacion" : "tpv-ingreso";
   }
 
   if (
@@ -39,23 +53,15 @@ export function clasificarMovimiento(concepto: string, detalles: string): ClaseM
     return "tpv-mantenimiento";
   }
 
-  if (comisionEstructurada && ingresoOn) {
-    return "tpv-comision";
+  if (comisionEstructurada) {
+    return "pendiente-clasificacion";
   }
 
   if (ingresoOn) {
     return "tpv-ingreso";
   }
 
-  if (comisionEstructurada) {
-    return "pendiente-clasificacion";
-  }
-
   if (TOKEN_TPV.test(texto)) {
-    if (/comision|comisiones|descuento tpv/.test(texto)) {
-      return "tpv-comision";
-    }
-
     if (/abono|liquidacion|venta tpv|ingreso tpv/.test(texto)) {
       return "tpv-ingreso";
     }
@@ -77,38 +83,17 @@ export function clasificarMovimiento(concepto: string, detalles: string): ClaseM
 type MovimientoClasificable = {
   conceptoOriginal: string;
   detallesOriginales: string;
+  importe?: number;
   clase: ClaseMovimiento;
 };
 
 /**
- * Un mismo datáfono puede dejar varios ingresos ON seguidos y, después,
- * varias comisiones C. de esos cierres. No hace falta que cada C. tenga
- * un ingreso justo delante ni emparejar cada comisión con un cierre.
- * Una C. estructurada se acepta mientras el bloque TPV siga abierto.
- * Un movimiento que no sea ingreso ni comisión lo cierra.
+ * No promociona una C. genérica por ir detrás de un ON.
+ * La clase ya viene decidida por clasificarMovimiento.
  * No crea apuntes.
  */
 export function clasificarSecuenciaTpv<T extends MovimientoClasificable>(movimientos: T[]): T[] {
-  let bloqueTpv = false;
-
-  return movimientos.map((movimiento) => {
-    const crudo = `${movimiento.conceptoOriginal} ${movimiento.detallesOriginales}`;
-    const comisionEstructurada =
-      PATRON_C.test(crudo) && !PATRON_ON.test(crudo) && movimiento.clase === "pendiente-clasificacion";
-
-    if (movimiento.clase === "tpv-ingreso" || movimiento.clase === "tpv-comision") {
-      bloqueTpv = true;
-      return movimiento;
-    }
-
-    if (comisionEstructurada && bloqueTpv) {
-      bloqueTpv = true;
-      return { ...movimiento, clase: "tpv-comision" };
-    }
-
-    bloqueTpv = false;
-    return movimiento;
-  });
+  return movimientos.map((movimiento) => ({ ...movimiento }));
 }
 
 export function codigosTpvEnTexto(concepto: string, detalles: string) {
