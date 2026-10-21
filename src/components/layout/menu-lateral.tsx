@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ResumenAccesoMenu,
   useAccesoApp,
 } from "@/components/acceso/control-acceso-app";
+import { marcaCargaVisible } from "@/components/layout/estado-navegacion";
 import { esRutaPermitidaGestoria } from "@/modules/auth/permisos-acceso";
 import {
   itemConsultas,
@@ -13,6 +14,40 @@ import {
   itemsMaestros,
   itemsOperativa,
 } from "@/config/menu/items-menu";
+
+function MarcaCargaEnlace({
+  etiqueta,
+  href,
+  modo = "fila",
+}: {
+  etiqueta: string;
+  href: string;
+  modo?: "fila" | "texto";
+}) {
+  const { pending } = useLinkStatus();
+  const pathname = usePathname();
+  const visible = marcaCargaVisible({
+    pendienteEnlace: pending,
+    href,
+    rutaActual: pathname,
+  });
+
+  if (modo === "texto") {
+    return (
+      <span aria-busy={visible || undefined}>
+        {etiqueta}
+        {visible ? " · Cargando…" : ""}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex w-full items-center justify-between gap-2" aria-busy={visible || undefined}>
+      <span>{etiqueta}</span>
+      {visible ? <span className="text-[11px] font-semibold">Cargando…</span> : null}
+    </span>
+  );
+}
 
 function MenuLink({
   href,
@@ -41,7 +76,7 @@ function MenuLink({
           : `flex h-full w-full items-center rounded-xl px-3.5 text-[15px] text-[#d7c7b5] transition hover:bg-[rgba(255,244,226,0.08)] hover:text-[#fff5e7] ${className}`
       }
     >
-      {label}
+      <MarcaCargaEnlace etiqueta={label} href={href} />
     </Link>
   );
 }
@@ -180,7 +215,7 @@ export function MenuLateral() {
                     : "block rounded-xl border border-[#5e4638] bg-[linear-gradient(180deg,#3a2b23_0%,#2b2019_100%)] px-3 py-2.5 text-center text-[14px] font-black text-[#f3e6d7] shadow-[0_8px_16px_rgba(14,10,8,0.18)] transition hover:bg-[linear-gradient(180deg,#433128_0%,#32241d_100%)]"
                 }
               >
-                {itemConsultas.label}
+                <MarcaCargaEnlace etiqueta={itemConsultas.label} href={itemConsultas.href} modo="texto" />
               </Link>
             ) : null}
 

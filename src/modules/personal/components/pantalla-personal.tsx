@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -8,6 +9,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarPersonalPersistido,
   listarPersonalPersistido,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 type TipoClasificacion = string;
@@ -210,10 +212,12 @@ export function PantallaPersonal({
   proveedores = [],
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const tipoPersonalId = useMemo(
@@ -281,12 +285,15 @@ export function PantallaPersonal({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarPersonalPersistido(clasificacionActiva);
+        const persistidos = await listarPersonalPersistido(clasificacionActiva, maestrosPersistencia);
 
         if (cancelado) {
           return;
@@ -313,6 +320,10 @@ export function PantallaPersonal({
         if (!cancelado) {
           window.alert("No se pudieron cargar los registros de personal guardados.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -321,7 +332,7 @@ export function PantallaPersonal({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva, tipoPersonalId]);
+  }, [clasificacionActiva, maestrosPersistencia, tipoPersonalId]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -890,6 +901,10 @@ export function PantallaPersonal({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando personal..." />;
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -9,6 +10,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarImpuestoPersistido,
   listarImpuestosPersistidos,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 const PROVEEDORES_PREDETERMINADOS: string[] = [];
@@ -221,10 +223,12 @@ export function PantallaImpuestos({
   proveedores = PROVEEDORES_PREDETERMINADOS,
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const acceso = useAccesoApp();
   const esGestoria = acceso.esGestoria;
@@ -290,12 +294,15 @@ export function PantallaImpuestos({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarImpuestosPersistidos(clasificacionActiva);
+        const persistidos = await listarImpuestosPersistidos(clasificacionActiva, maestrosPersistencia);
 
         if (cancelado) {
           return;
@@ -322,6 +329,10 @@ export function PantallaImpuestos({
         if (!cancelado) {
           window.alert("No se pudieron cargar los impuestos guardados.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -330,7 +341,7 @@ export function PantallaImpuestos({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva, formaPagoFija]);
+  }, [clasificacionActiva, formaPagoFija, maestrosPersistencia]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -951,6 +962,10 @@ export function PantallaImpuestos({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando impuestos..." />;
   }
 
   return (

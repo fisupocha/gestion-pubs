@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
-import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
+import { AvisoCargaSeccion, AvisoErrorCarga } from "@/components/ui/aviso-carga-seccion";
+import {
+  cargarOperativaConsultas,
+  lecturaMaestrosYaCargados,
+} from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  MENSAJE_ERROR_REPARTOS,
+  leerConsultaProtegida,
+  puedeMostrarImportes,
+  type FaseCargaConsulta,
+} from "@/modules/consultas/utils/estado-carga-consulta";
+import type { MaestrosPersistencia } from "@/modules/operativa/utils/persistencia-operativa";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
 import {
@@ -27,6 +38,7 @@ import {
 
 type PantallaRepartosEspecialesProps = {
   clasificacion: ClasificacionMapa;
+  maestrosPersistencia?: MaestrosPersistencia;
   initialState: ConsultaState;
 };
 
@@ -108,6 +120,7 @@ function textoMeses(meses: string[]) {
 
 export function PantallaRepartosEspeciales({
   clasificacion,
+  maestrosPersistencia,
   initialState,
 }: PantallaRepartosEspecialesProps) {
   const [operativa, setOperativa] = useState(OPERATIVA_CONSULTA_VACIA);
@@ -123,29 +136,37 @@ export function PantallaRepartosEspeciales({
   const [aviso, setAviso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [confirmarId, setConfirmarId] = useState<string | null>(null);
+  const [faseCarga, setFaseCarga] = useState<FaseCargaConsulta>("cargando");
+  const [reintento, setReintento] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
+    setFaseCarga("cargando");
     const cargar = async () => {
-      try {
-        const [operativaData, listado] = await Promise.all([
-          cargarOperativaConsultas(clasificacion),
+      const lectura = await leerConsultaProtegida(() =>
+        Promise.all([
+          cargarOperativaConsultas(clasificacion, lecturaMaestrosYaCargados(maestrosPersistencia)),
           listarRepartosEspeciales(),
-        ]);
-        if (cancelado) return;
-        setOperativa(operativaData);
-        setRepartos(listado.repartos);
-        setDisponible(listado.disponible);
-        setMensajePersistencia(listado.mensaje);
-      } catch (causa) {
-        console.error("No se pudieron cargar los repartos especiales", causa);
+        ])
+      );
+      if (cancelado) return;
+      if (lectura.fase !== "correcta") {
+        console.error("No se pudieron cargar los repartos especiales");
+        setFaseCarga("error");
+        return;
       }
+      const [operativaData, listado] = lectura.datos;
+      setOperativa(operativaData);
+      setRepartos(listado.repartos);
+      setDisponible(listado.disponible);
+      setMensajePersistencia(listado.mensaje);
+      setFaseCarga("correcta");
     };
     void cargar();
     return () => {
       cancelado = true;
     };
-  }, [clasificacion]);
+  }, [clasificacion, maestrosPersistencia, reintento]);
 
   const volverHref = useMemo(() => {
     const query = consultaStateToQueryString(initialState);
@@ -295,6 +316,18 @@ export function PantallaRepartosEspeciales({
     } finally {
       setGuardando(false);
     }
+  }
+
+  if (!puedeMostrarImportes(faseCarga)) {
+    if (faseCarga === "error") {
+      return (
+        <AvisoErrorCarga
+          texto={MENSAJE_ERROR_REPARTOS}
+          onReintentar={() => setReintento((valor) => valor + 1)}
+        />
+      );
+    }
+    return <AvisoCargaSeccion texto="Cargando repartos especiales..." />;
   }
 
   return (

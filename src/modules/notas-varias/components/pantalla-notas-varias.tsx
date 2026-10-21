@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -8,6 +9,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarNotaVariaPersistida,
   listarNotasVariasPersistidas,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 type TipoClasificacion = string;
@@ -216,10 +218,12 @@ export function PantallaNotasVarias({
   clientes = [],
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   clientes?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
@@ -287,12 +291,15 @@ export function PantallaNotasVarias({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarNotasVariasPersistidas(clasificacionActiva);
+        const persistidos = await listarNotasVariasPersistidas(clasificacionActiva, maestrosPersistencia);
 
         if (cancelado) {
           return;
@@ -319,6 +326,10 @@ export function PantallaNotasVarias({
         if (!cancelado) {
           window.alert("No se pudieron cargar las notas varias guardadas.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -327,7 +338,7 @@ export function PantallaNotasVarias({
     return () => {
       cancelado = true;
     };
-  }, [bancoPorDefecto, clasificacionActiva, formaPagoFija]);
+  }, [bancoPorDefecto, clasificacionActiva, formaPagoFija, maestrosPersistencia]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -909,6 +920,10 @@ export function PantallaNotasVarias({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando notas varias..." />;
   }
 
   return (

@@ -4,6 +4,7 @@ import type { ClasificacionMapa } from "@/lib/clasificacion";
 import {
   listarOperativaParaConsultas,
   type LecturaOperativaInyectada,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 import type { OperativaConsultaData, RegistroBase } from "@/modules/consultas/utils/motor-consultas";
 
@@ -23,6 +24,20 @@ function normalizarRegistro(item: Record<string, unknown>): RegistroBase {
     base4: String(item.base4 ?? ""),
     base10: String(item.base10 ?? ""),
     base21: String(item.base21 ?? ""),
+  };
+}
+
+export function lecturaMaestrosYaCargados(
+  maestros?: MaestrosPersistencia
+): LecturaOperativaInyectada | undefined {
+  if (!maestros) {
+    return undefined;
+  }
+
+  return {
+    async cargarMaestros() {
+      return maestros;
+    },
   };
 }
 

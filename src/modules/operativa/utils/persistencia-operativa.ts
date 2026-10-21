@@ -58,7 +58,7 @@ type SubfamiliaBasica = MaestroBasico & {
   familia_id?: number | null;
 };
 
-type MaestrosPersistencia = {
+export type MaestrosPersistencia = {
   empresas: MaestroBasico[];
   proveedores: MaestroBasico[];
   clientes: MaestroBasico[];
@@ -307,7 +307,7 @@ type HidratadorOperativa = (
 
 export type LecturaOperativaInyectada = {
   cargarMaestros: () => Promise<MaestrosPersistencia>;
-  leerTabla: (tabla: string) => Promise<Record<string, unknown>[]>;
+  leerTabla?: (tabla: string) => Promise<Record<string, unknown>[]>;
 };
 
 async function listarTabla(
@@ -544,40 +544,82 @@ function hidratarNotaVaria(
   });
 }
 
-export async function listarFacturasRecibidasPersistidas(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_facturas_recibidas", hidratarFacturaRecibida, clasificacion);
+export async function listarFacturasRecibidasPersistidas(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla(
+    "operativa_facturas_recibidas",
+    hidratarFacturaRecibida,
+    clasificacion,
+    maestrosYaCargados
+  );
 }
 
-export async function listarFacturasEmitidasPersistidas(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_facturas_emitidas", hidratarFacturaEmitida, clasificacion);
+export async function listarFacturasEmitidasPersistidas(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla(
+    "operativa_facturas_emitidas",
+    hidratarFacturaEmitida,
+    clasificacion,
+    maestrosYaCargados
+  );
 }
 
-export async function listarAlquileresPersistidos(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_alquileres", hidratarAlquiler, clasificacion);
+export async function listarAlquileresPersistidos(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_alquileres", hidratarAlquiler, clasificacion, maestrosYaCargados);
 }
 
-export async function listarGastosBancariosPersistidos(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_gastos_bancarios", hidratarGastoBancario, clasificacion);
+export async function listarGastosBancariosPersistidos(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla(
+    "operativa_gastos_bancarios",
+    hidratarGastoBancario,
+    clasificacion,
+    maestrosYaCargados
+  );
 }
 
-export async function listarCreditosPersistidos(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_creditos", hidratarCredito, clasificacion);
+export async function listarCreditosPersistidos(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_creditos", hidratarCredito, clasificacion, maestrosYaCargados);
 }
 
-export async function listarImpuestosPersistidos(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_impuestos", hidratarImpuesto, clasificacion);
+export async function listarImpuestosPersistidos(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_impuestos", hidratarImpuesto, clasificacion, maestrosYaCargados);
 }
 
-export async function listarPersonalPersistido(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_personal", hidratarPersonal, clasificacion);
+export async function listarPersonalPersistido(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_personal", hidratarPersonal, clasificacion, maestrosYaCargados);
 }
 
-export async function listarCajaPersistida(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_caja", hidratarCaja, clasificacion);
+export async function listarCajaPersistida(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_caja", hidratarCaja, clasificacion, maestrosYaCargados);
 }
 
-export async function listarNotasVariasPersistidas(clasificacion: ClasificacionMapa) {
-  return listarTabla("operativa_notas_varias", hidratarNotaVaria, clasificacion);
+export async function listarNotasVariasPersistidas(
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia
+) {
+  return listarTabla("operativa_notas_varias", hidratarNotaVaria, clasificacion, maestrosYaCargados);
 }
 
 export async function listarOperativaParaConsultas(

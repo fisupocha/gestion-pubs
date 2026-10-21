@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -8,6 +9,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarCajaPersistida,
   listarCajaPersistida,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 type TipoClasificacion = string;
@@ -230,10 +232,12 @@ export function PantallaCaja({
   proveedores = [],
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const clasificacionActiva: ClasificacionMapa = useMemo(() => clasificacion ?? {}, [clasificacion]);
   const opcionesLocal = maestros?.locales ?? [];
@@ -297,12 +301,15 @@ export function PantallaCaja({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarCajaPersistida(clasificacionActiva);
+        const persistidos = await listarCajaPersistida(clasificacionActiva, maestrosPersistencia);
 
         if (cancelado) {
           return;
@@ -330,7 +337,9 @@ export function PantallaCaja({
           window.alert("No se pudieron cargar los registros guardados de caja.");
         }
       } finally {
-        void cancelado;
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -339,7 +348,7 @@ export function PantallaCaja({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, maestrosPersistencia]);
 
   const totalCaja = round2(parseDecimal(formulario.base10));
   const totalBase = round2(totalCaja / 1.1);
@@ -853,6 +862,10 @@ export function PantallaCaja({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando caja..." />;
   }
 
   return (

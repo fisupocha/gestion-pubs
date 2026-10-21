@@ -1,25 +1,17 @@
 import { PantallaFacturasEmitidas } from "@/modules/facturas-emitidas/components/pantalla-facturas-emitidas";
-import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obtener-clasificacion";
-import { listarClientes } from "@/modules/maestros/clientes/data/listar-clientes";
-import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
+import { prepararPantallaOperativa } from "@/modules/operativa/utils/preparar-pantalla-operativa";
 
 export const dynamic = "force-dynamic";
 
 export default async function FacturasEmitidasPage() {
-  const [clientesData, clasificacion, maestros] = await Promise.all([
-    listarClientes(),
-    obtenerClasificacion(),
-    obtenerMaestrosFormulario(),
-  ]);
-
-  const clientes = [...new Set(clientesData.map((cliente) => cliente.nombre.trim()))]
-    .filter(Boolean);
+  const datos = await prepararPantallaOperativa();
 
   return (
     <PantallaFacturasEmitidas
-      clientes={clientes}
-      clasificacion={clasificacion}
-      maestros={maestros}
+      clientes={datos.clientes}
+      clasificacion={datos.clasificacion}
+      maestros={datos.maestros}
+      maestrosPersistencia={datos.maestrosPersistencia}
     />
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -9,6 +10,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarGastoBancarioPersistido,
   listarGastosBancariosPersistidos,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 type TipoClasificacion = string;
@@ -245,10 +247,12 @@ export function PantallaGastosBancarios({
   proveedores = [],
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const acceso = useAccesoApp();
   const esGestoria = acceso.esGestoria;
@@ -320,12 +324,18 @@ export function PantallaGastosBancarios({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarGastosBancariosPersistidos(clasificacionActiva);
+        const persistidos = await listarGastosBancariosPersistidos(
+          clasificacionActiva,
+          maestrosPersistencia
+        );
 
         if (cancelado) {
           return;
@@ -352,6 +362,10 @@ export function PantallaGastosBancarios({
         if (!cancelado) {
           window.alert("No se pudieron cargar los gastos bancarios guardados.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -360,7 +374,7 @@ export function PantallaGastosBancarios({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva, formaPagoFija]);
+  }, [clasificacionActiva, formaPagoFija, maestrosPersistencia]);
 
   const base0 = parseDecimal(formulario.base0);
   const base4 = parseDecimal(formulario.base4);
@@ -919,6 +933,10 @@ export function PantallaGastosBancarios({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando gastos bancarios..." />;
   }
 
   return (

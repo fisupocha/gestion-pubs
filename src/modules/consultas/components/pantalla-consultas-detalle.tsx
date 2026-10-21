@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AvisoCargaSeccion, AvisoErrorCarga } from "@/components/ui/aviso-carga-seccion";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import {
@@ -22,7 +23,17 @@ import {
   descargarPdfInforme,
 } from "@/modules/consultas/utils/exportar-informe-consulta";
 import { construirInformeConsulta } from "@/modules/consultas/utils/informe-consulta";
-import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  cargarOperativaConsultas,
+  lecturaMaestrosYaCargados,
+} from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  MENSAJE_ERROR_DETALLE,
+  leerConsultaProtegida,
+  puedeMostrarImportes,
+  type FaseCargaConsulta,
+} from "@/modules/consultas/utils/estado-carga-consulta";
+import type { MaestrosPersistencia } from "@/modules/operativa/utils/persistencia-operativa";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
 import {
@@ -37,6 +48,7 @@ import {
 type PantallaConsultasDetalleProps = {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
   initialState: ConsultaState;
 };
 
@@ -139,6 +151,7 @@ function FilaFamiliaMensual({
 export function PantallaConsultasDetalle({
   clasificacion,
   maestros,
+  maestrosPersistencia,
   initialState,
 }: PantallaConsultasDetalleProps) {
   const router = useRouter();
@@ -148,27 +161,37 @@ export function PantallaConsultasDetalle({
   const [avisoRepartosEspeciales, setAvisoRepartosEspeciales] = useState<string | null>(null);
   const [mesesAbiertos, setMesesAbiertos] = useState<Set<string>>(() => new Set());
   const [familiasAbiertas, setFamiliasAbiertas] = useState<Set<string>>(() => new Set());
+  const [faseCarga, setFaseCarga] = useState<FaseCargaConsulta>("cargando");
+  const [reintento, setReintento] = useState(0);
   const reportRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelado = false;
 
+    setFaseCarga("cargando");
+
     const cargar = async () => {
-      try {
-        const [data, repartos, especiales] = await Promise.all([
-          cargarOperativaConsultas(clasificacion),
+      const lectura = await leerConsultaProtegida(() =>
+        Promise.all([
+          cargarOperativaConsultas(clasificacion, lecturaMaestrosYaCargados(maestrosPersistencia)),
           listarRepartosRiverocioManuales(),
           listarRepartosEspeciales(),
-        ]);
-        if (!cancelado) {
-          setOperativa(data);
-          setRepartosRiverocio(repartos);
-          setRepartosEspeciales(especiales.repartos);
-          setAvisoRepartosEspeciales(especiales.disponible ? null : especiales.mensaje);
-        }
-      } catch (error) {
-        console.error("No se pudo cargar la operativa para el detalle de consultas", error);
+        ])
+      );
+      if (cancelado) {
+        return;
       }
+      if (lectura.fase !== "correcta") {
+        console.error("No se pudo cargar la operativa para el detalle de consultas");
+        setFaseCarga("error");
+        return;
+      }
+      const [data, repartos, especiales] = lectura.datos;
+      setOperativa(data);
+      setRepartosRiverocio(repartos);
+      setRepartosEspeciales(especiales.repartos);
+      setAvisoRepartosEspeciales(especiales.disponible ? null : especiales.mensaje);
+      setFaseCarga("correcta");
     };
 
     void cargar();
@@ -176,7 +199,7 @@ export function PantallaConsultasDetalle({
     return () => {
       cancelado = true;
     };
-  }, [clasificacion]);
+  }, [clasificacion, maestrosPersistencia, reintento]);
 
   const resultado = useMemo(
     () =>
@@ -333,6 +356,18 @@ export function PantallaConsultasDetalle({
       window.alert("No se pudo crear el PDF.");
     }
   };
+
+  if (!puedeMostrarImportes(faseCarga)) {
+    if (faseCarga === "error") {
+      return (
+        <AvisoErrorCarga
+          texto={MENSAJE_ERROR_DETALLE}
+          onReintentar={() => setReintento((valor) => valor + 1)}
+        />
+      );
+    }
+    return <AvisoCargaSeccion texto="Cargando el detalle de consultas..." />;
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 p-3">

@@ -1,6 +1,6 @@
 import { PantallaRepartosEspeciales } from "@/modules/consultas/components/pantalla-repartos-especiales";
-import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obtener-clasificacion";
 import { consultaStateFromSearchParams } from "@/modules/consultas/utils/estado-consultas";
+import { prepararPantallaOperativa } from "@/modules/operativa/utils/preparar-pantalla-operativa";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +11,15 @@ type RepartosEspecialesPageProps = {
 export default async function RepartosEspecialesPage({
   searchParams,
 }: RepartosEspecialesPageProps) {
-  const [clasificacion, resolvedSearchParams] = await Promise.all([
-    obtenerClasificacion(),
+  const [datos, resolvedSearchParams] = await Promise.all([
+    prepararPantallaOperativa(),
     searchParams,
   ]);
 
   return (
     <PantallaRepartosEspeciales
-      clasificacion={clasificacion}
+      clasificacion={datos.clasificacion}
+      maestrosPersistencia={datos.maestrosPersistencia}
       initialState={consultaStateFromSearchParams(resolvedSearchParams)}
     />
   );

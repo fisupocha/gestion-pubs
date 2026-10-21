@@ -1,7 +1,6 @@
 import { PantallaConsultasDetalle } from "@/modules/consultas/components/pantalla-consultas-detalle";
-import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obtener-clasificacion";
-import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import { consultaStateFromSearchParams } from "@/modules/consultas/utils/estado-consultas";
+import { prepararPantallaOperativa } from "@/modules/operativa/utils/preparar-pantalla-operativa";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +9,8 @@ type DetallePageProps = {
 };
 
 export default async function ConsultasDetallePage({ searchParams }: DetallePageProps) {
-  const [clasificacion, maestros, resolvedSearchParams] = await Promise.all([
-    obtenerClasificacion(),
-    obtenerMaestrosFormulario(),
+  const [datos, resolvedSearchParams] = await Promise.all([
+    prepararPantallaOperativa(),
     searchParams,
   ]);
 
@@ -20,8 +18,9 @@ export default async function ConsultasDetallePage({ searchParams }: DetallePage
 
   return (
     <PantallaConsultasDetalle
-      clasificacion={clasificacion}
-      maestros={maestros}
+      clasificacion={datos.clasificacion}
+      maestros={datos.maestros}
+      maestrosPersistencia={datos.maestrosPersistencia}
       initialState={initialState}
     />
   );

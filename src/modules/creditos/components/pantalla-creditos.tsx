@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -9,6 +10,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarCreditoPersistido,
   listarCreditosPersistidos,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 type TipoClasificacion = string;
@@ -245,10 +247,12 @@ export function PantallaCreditos({
   proveedores = [],
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   proveedores?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const acceso = useAccesoApp();
   const esGestoria = acceso.esGestoria;
@@ -318,12 +322,15 @@ export function PantallaCreditos({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarCreditosPersistidos(clasificacionActiva);
+        const persistidos = await listarCreditosPersistidos(clasificacionActiva, maestrosPersistencia);
 
         if (cancelado) {
           return;
@@ -350,6 +357,10 @@ export function PantallaCreditos({
         if (!cancelado) {
           window.alert("No se pudieron cargar los creditos guardados.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -358,7 +369,7 @@ export function PantallaCreditos({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva, formaPagoFija]);
+  }, [clasificacionActiva, formaPagoFija, maestrosPersistencia]);
 
   const base0 = parseDecimal(formulario.base0);
   const base4 = parseDecimal(formulario.base4);
@@ -917,6 +928,10 @@ export function PantallaCreditos({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando créditos..." />;
   }
 
   return (

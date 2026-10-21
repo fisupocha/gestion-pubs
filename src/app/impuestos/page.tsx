@@ -1,25 +1,17 @@
 import { PantallaImpuestos } from "@/modules/impuestos/components/pantalla-impuestos";
-import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obtener-clasificacion";
-import { listarProveedores } from "@/modules/maestros/proveedores/data/listar-proveedores";
-import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
+import { prepararPantallaOperativa } from "@/modules/operativa/utils/preparar-pantalla-operativa";
 
 export const dynamic = "force-dynamic";
 
 export default async function ImpuestosPage() {
-  const [proveedoresData, clasificacion, maestros] = await Promise.all([
-    listarProveedores(),
-    obtenerClasificacion(),
-    obtenerMaestrosFormulario(),
-  ]);
-
-  const proveedores = [...new Set(proveedoresData.map((proveedor) => proveedor.nombre.trim()))]
-    .filter(Boolean);
+  const datos = await prepararPantallaOperativa();
 
   return (
     <PantallaImpuestos
-      proveedores={proveedores}
-      clasificacion={clasificacion}
-      maestros={maestros}
+      proveedores={datos.proveedores}
+      clasificacion={datos.clasificacion}
+      maestros={datos.maestros}
+      maestrosPersistencia={datos.maestrosPersistencia}
     />
   );
 }

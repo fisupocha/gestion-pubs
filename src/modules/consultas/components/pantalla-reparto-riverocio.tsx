@@ -4,7 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
-import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
+import { AvisoCargaSeccion, AvisoErrorCarga } from "@/components/ui/aviso-carga-seccion";
+import {
+  cargarOperativaConsultas,
+  lecturaMaestrosYaCargados,
+} from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  MENSAJE_ERROR_RIVEROCIO,
+  leerConsultaProtegida,
+  puedeMostrarImportes,
+  type FaseCargaConsulta,
+} from "@/modules/consultas/utils/estado-carga-consulta";
+import type { MaestrosPersistencia } from "@/modules/operativa/utils/persistencia-operativa";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import { consultaStateToQueryString } from "@/modules/consultas/utils/estado-consultas";
 import {
@@ -22,6 +33,7 @@ import {
 type PantallaRepartoRiverocioProps = {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
   initialState: ConsultaState;
 };
 
@@ -101,6 +113,7 @@ const botonRestaurarClassName =
 export function PantallaRepartoRiverocio({
   clasificacion,
   maestros,
+  maestrosPersistencia,
   initialState,
 }: PantallaRepartoRiverocioProps) {
   const columnasTablaClassName =
@@ -109,26 +122,34 @@ export function PantallaRepartoRiverocio({
   const [repartos, setRepartos] = useState<RepartoRiverocioManual[]>([]);
   const [edicion, setEdicion] = useState<EstadoEdicion | null>(null);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [faseCarga, setFaseCarga] = useState<FaseCargaConsulta>("cargando");
+  const [reintento, setReintento] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
+    setFaseCarga("cargando");
 
     const cargar = async () => {
-      try {
-        const [operativaData, repartosData] = await Promise.all([
-          cargarOperativaConsultas(clasificacion),
+      const lectura = await leerConsultaProtegida(() =>
+        Promise.all([
+          cargarOperativaConsultas(clasificacion, lecturaMaestrosYaCargados(maestrosPersistencia)),
           listarRepartosRiverocioManuales(),
-        ]);
+        ])
+      );
 
-        if (cancelado) {
-          return;
-        }
-
-        setOperativa(operativaData);
-        setRepartos(repartosData);
-      } catch (error) {
-        console.error("No se pudo cargar el reparto manual de Riverocio", error);
+      if (cancelado) {
+        return;
       }
+      if (lectura.fase !== "correcta") {
+        console.error("No se pudo cargar el reparto manual de Riverocio");
+        setFaseCarga("error");
+        return;
+      }
+
+      const [operativaData, repartosData] = lectura.datos;
+      setOperativa(operativaData);
+      setRepartos(repartosData);
+      setFaseCarga("correcta");
     };
 
     void cargar();
@@ -136,7 +157,7 @@ export function PantallaRepartoRiverocio({
     return () => {
       cancelado = true;
     };
-  }, [clasificacion]);
+  }, [clasificacion, maestrosPersistencia, reintento]);
 
   const volverHref = useMemo(() => {
     const query = consultaStateToQueryString(initialState);
@@ -216,6 +237,18 @@ export function PantallaRepartoRiverocio({
       setEdicion(null);
       setErrorEdicion(null);
     }
+  }
+
+  if (!puedeMostrarImportes(faseCarga)) {
+    if (faseCarga === "error") {
+      return (
+        <AvisoErrorCarga
+          texto={MENSAJE_ERROR_RIVEROCIO}
+          onReintentar={() => setReintento((valor) => valor + 1)}
+        />
+      );
+    }
+    return <AvisoCargaSeccion texto="Cargando el reparto de Riverocio..." />;
   }
 
   return (

@@ -1,7 +1,6 @@
 import { PantallaRepartoRiverocio } from "@/modules/consultas/components/pantalla-reparto-riverocio";
-import { obtenerClasificacion } from "@/modules/maestros/clasificacion/data/obtener-clasificacion";
-import { obtenerMaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import { consultaStateFromSearchParams } from "@/modules/consultas/utils/estado-consultas";
+import { prepararPantallaOperativa } from "@/modules/operativa/utils/preparar-pantalla-operativa";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +11,8 @@ type RepartoRiverocioPageProps = {
 export default async function RepartoRiverocioPage({
   searchParams,
 }: RepartoRiverocioPageProps) {
-  const [clasificacion, maestros, resolvedSearchParams] = await Promise.all([
-    obtenerClasificacion(),
-    obtenerMaestrosFormulario(),
+  const [datos, resolvedSearchParams] = await Promise.all([
+    prepararPantallaOperativa(),
     searchParams,
   ]);
 
@@ -22,8 +20,9 @@ export default async function RepartoRiverocioPage({
 
   return (
     <PantallaRepartoRiverocio
-      clasificacion={clasificacion}
-      maestros={maestros}
+      clasificacion={datos.clasificacion}
+      maestros={datos.maestros}
+      maestrosPersistencia={datos.maestrosPersistencia}
       initialState={initialState}
     />
   );

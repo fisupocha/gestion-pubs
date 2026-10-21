@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
+import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -9,6 +10,7 @@ import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-
 import {
   guardarFacturaEmitidaPersistida,
   listarFacturasEmitidasPersistidas,
+  type MaestrosPersistencia,
 } from "@/modules/operativa/utils/persistencia-operativa";
 
 const CLIENTES_PREDETERMINADOS: string[] = [];
@@ -210,10 +212,12 @@ export function PantallaFacturasEmitidas({
   clientes = CLIENTES_PREDETERMINADOS,
   clasificacion,
   maestros,
+  maestrosPersistencia,
 }: {
   clientes?: string[];
   clasificacion?: ClasificacionMapa;
   maestros?: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
 }) {
   const acceso = useAccesoApp();
   const esGestoria = acceso.esGestoria;
@@ -275,12 +279,18 @@ export function PantallaFacturasEmitidas({
   const numeroPagareRef = useRef<HTMLInputElement | null>(null);
   const observacionesRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [cargandoLista, setCargandoLista] = useState(true);
+
   useEffect(() => {
     let cancelado = false;
+    setCargandoLista(true);
 
     async function cargarPersistidos() {
       try {
-        const persistidos = await listarFacturasEmitidasPersistidas(clasificacionActiva);
+        const persistidos = await listarFacturasEmitidasPersistidas(
+          clasificacionActiva,
+          maestrosPersistencia
+        );
 
         if (cancelado) {
           return;
@@ -307,6 +317,10 @@ export function PantallaFacturasEmitidas({
         if (!cancelado) {
           window.alert("No se pudieron cargar las facturas emitidas guardadas.");
         }
+      } finally {
+        if (!cancelado) {
+          setCargandoLista(false);
+        }
       }
     }
 
@@ -315,7 +329,7 @@ export function PantallaFacturasEmitidas({
     return () => {
       cancelado = true;
     };
-  }, [clasificacionActiva]);
+  }, [clasificacionActiva, maestrosPersistencia]);
 
   const familiasDisponibles = useMemo(() => {
     if (!formulario.tipo) {
@@ -941,6 +955,10 @@ export function PantallaFacturasEmitidas({
     }));
     solicitarDestino({ tipo: "registro", indice: resultadosBusqueda[0] });
     setMensajeBusqueda(`1 de ${resultadosBusqueda.length}`);
+  }
+
+  if (cargandoLista) {
+    return <AvisoCargaSeccion texto="Cargando facturas emitidas..." />;
   }
 
   return (

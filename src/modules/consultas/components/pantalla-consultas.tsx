@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AvisoCargaSeccion, AvisoErrorCarga } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
@@ -12,7 +13,17 @@ import {
   obtenerFamiliasPorTipoConsulta,
   obtenerTiposDisponibles,
 } from "@/modules/consultas/utils/motor-consultas";
-import { cargarOperativaConsultas } from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  cargarOperativaConsultas,
+  lecturaMaestrosYaCargados,
+} from "@/modules/consultas/utils/cargar-operativa-consultas";
+import {
+  MENSAJE_ERROR_CONSULTAS,
+  leerConsultaProtegida,
+  puedeMostrarImportes,
+  type FaseCargaConsulta,
+} from "@/modules/consultas/utils/estado-carga-consulta";
+import type { MaestrosPersistencia } from "@/modules/operativa/utils/persistencia-operativa";
 import {
   listarRepartosRiverocioManuales,
   type RepartoRiverocioManual,
@@ -33,6 +44,7 @@ import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 type PantallaConsultasProps = {
   clasificacion: ClasificacionMapa;
   maestros: MaestrosFormulario;
+  maestrosPersistencia?: MaestrosPersistencia;
   initialState: ConsultaState;
 };
 
@@ -222,6 +234,7 @@ function MiniResumen({
 export function PantallaConsultas({
   clasificacion,
   maestros,
+  maestrosPersistencia,
   initialState,
 }: PantallaConsultasProps) {
   const [state, setState] = useState<ConsultaState>(() =>
@@ -233,6 +246,8 @@ export function PantallaConsultas({
   const [repartosRiverocio, setRepartosRiverocio] = useState<RepartoRiverocioManual[]>([]);
   const [repartosEspeciales, setRepartosEspeciales] = useState<RepartoEspecial[]>([]);
   const [avisoRepartosEspeciales, setAvisoRepartosEspeciales] = useState<string | null>(null);
+  const [faseCarga, setFaseCarga] = useState<FaseCargaConsulta>("cargando");
+  const [reintento, setReintento] = useState(0);
 
   useEffect(() => {
     guardarConsultaState(state);
@@ -240,23 +255,30 @@ export function PantallaConsultas({
 
   useEffect(() => {
     let cancelado = false;
+    setFaseCarga("cargando");
 
     const cargar = async () => {
-      try {
-        const [data, repartos, especiales] = await Promise.all([
-          cargarOperativaConsultas(clasificacion),
+      const lectura = await leerConsultaProtegida(() =>
+        Promise.all([
+          cargarOperativaConsultas(clasificacion, lecturaMaestrosYaCargados(maestrosPersistencia)),
           listarRepartosRiverocioManuales(),
           listarRepartosEspeciales(),
-        ]);
-        if (!cancelado) {
-          setOperativa(data);
-          setRepartosRiverocio(repartos);
-          setRepartosEspeciales(especiales.repartos);
-          setAvisoRepartosEspeciales(especiales.disponible ? null : especiales.mensaje);
-        }
-      } catch (error) {
-        console.error("No se pudo cargar la operativa para consultas", error);
+        ])
+      );
+      if (cancelado) {
+        return;
       }
+      if (lectura.fase !== "correcta") {
+        console.error("No se pudo cargar la operativa para consultas");
+        setFaseCarga("error");
+        return;
+      }
+      const [data, repartos, especiales] = lectura.datos;
+      setOperativa(data);
+      setRepartosRiverocio(repartos);
+      setRepartosEspeciales(especiales.repartos);
+      setAvisoRepartosEspeciales(especiales.disponible ? null : especiales.mensaje);
+      setFaseCarga("correcta");
     };
 
     void cargar();
@@ -264,7 +286,7 @@ export function PantallaConsultas({
     return () => {
       cancelado = true;
     };
-  }, [clasificacion]);
+  }, [clasificacion, maestrosPersistencia, reintento]);
 
   const tiposDisponibles = useMemo(
     () => ordenarAlfabetico(obtenerTiposDisponibles(clasificacion)),
@@ -308,6 +330,18 @@ export function PantallaConsultas({
     const query = consultaStateToQueryString(state);
     return query ? `/consultas/repartos-especiales?${query}` : "/consultas/repartos-especiales";
   }, [state]);
+
+  if (!puedeMostrarImportes(faseCarga)) {
+    if (faseCarga === "error") {
+      return (
+        <AvisoErrorCarga
+          texto={MENSAJE_ERROR_CONSULTAS}
+          onReintentar={() => setReintento((valor) => valor + 1)}
+        />
+      );
+    }
+    return <AvisoCargaSeccion texto="Cargando consultas..." />;
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-2 p-2">
