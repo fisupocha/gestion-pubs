@@ -2,15 +2,8 @@
 
 import type { ClasificacionMapa } from "@/lib/clasificacion";
 import {
-  listarAlquileresPersistidos,
-  listarCajaPersistida,
-  listarCreditosPersistidos,
-  listarFacturasEmitidasPersistidas,
-  listarFacturasRecibidasPersistidas,
-  listarGastosBancariosPersistidos,
-  listarImpuestosPersistidos,
-  listarNotasVariasPersistidas,
-  listarPersonalPersistido,
+  listarOperativaParaConsultas,
+  type LecturaOperativaInyectada,
 } from "@/modules/operativa/utils/persistencia-operativa";
 import type { OperativaConsultaData, RegistroBase } from "@/modules/consultas/utils/motor-consultas";
 
@@ -34,9 +27,10 @@ function normalizarRegistro(item: Record<string, unknown>): RegistroBase {
 }
 
 export async function cargarOperativaConsultas(
-  clasificacion: ClasificacionMapa
+  clasificacion: ClasificacionMapa,
+  inyectada?: LecturaOperativaInyectada
 ): Promise<OperativaConsultaData> {
-  const [
+  const {
     caja,
     facturasEmitidas,
     facturasRecibidas,
@@ -46,17 +40,7 @@ export async function cargarOperativaConsultas(
     gastosBancarios,
     creditos,
     notasVarias,
-  ] = await Promise.all([
-    listarCajaPersistida(clasificacion),
-    listarFacturasEmitidasPersistidas(clasificacion),
-    listarFacturasRecibidasPersistidas(clasificacion),
-    listarAlquileresPersistidos(clasificacion),
-    listarImpuestosPersistidos(clasificacion),
-    listarPersonalPersistido(clasificacion),
-    listarGastosBancariosPersistidos(clasificacion),
-    listarCreditosPersistidos(clasificacion),
-    listarNotasVariasPersistidas(clasificacion),
-  ]);
+  } = await listarOperativaParaConsultas(clasificacion, inyectada);
 
   return {
     caja: caja.map((item) => normalizarRegistro(item as unknown as Record<string, unknown>)),

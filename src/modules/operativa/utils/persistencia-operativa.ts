@@ -299,30 +299,51 @@ function resolverEtiquetasDesdeFila(
   };
 }
 
+type HidratadorOperativa = (
+  row: Record<string, unknown>,
+  maestros: MaestrosPersistencia,
+  clasificacion: ClasificacionMapa
+) => RegistroOperativa;
+
+export type LecturaOperativaInyectada = {
+  cargarMaestros: () => Promise<MaestrosPersistencia>;
+  leerTabla: (tabla: string) => Promise<Record<string, unknown>[]>;
+};
+
 async function listarTabla(
   tabla: string,
-  hidratar: (row: Record<string, unknown>, maestros: MaestrosPersistencia, clasificacion: ClasificacionMapa) => RegistroOperativa,
-  clasificacion: ClasificacionMapa
+  hidratar: HidratadorOperativa,
+  clasificacion: ClasificacionMapa,
+  maestrosYaCargados?: MaestrosPersistencia,
+  leerTabla?: (tabla: string) => Promise<Record<string, unknown>[]>
 ) {
-  const maestros = await cargarMaestrosPersistencia();
+  const maestros = maestrosYaCargados ?? (await cargarMaestrosPersistencia());
+  const filas = leerTabla
+    ? await leerTabla(tabla)
+    : await leerFilasDeTabla(tabla);
+
+  return filas.map((row) => hidratar(row, maestros, clasificacion));
+}
+
+async function leerFilasDeTabla(tabla: string) {
   const { data, error } = await supabase.from(tabla).select("*").order("id", { ascending: true });
 
   if (error) {
     throw new Error(`No se pudieron cargar registros de ${tabla}`);
   }
 
-  return (data ?? []).map((row) => hidratar(row, maestros, clasificacion));
+  return (data ?? []) as Record<string, unknown>[];
 }
 
 async function guardarTabla(
   tabla: string,
   registro: { id: number },
   dataGuardar: Record<string, unknown>,
-  hidratar: (row: Record<string, unknown>, maestros: MaestrosPersistencia, clasificacion: ClasificacionMapa) => RegistroOperativa,
-  clasificacion: ClasificacionMapa
+  hidratar: HidratadorOperativa,
+  clasificacion: ClasificacionMapa,
+  maestros: MaestrosPersistencia
 ) {
   await exigirAdministrador();
-  const maestros = await cargarMaestrosPersistencia();
   const query = registro.id
     ? supabase.from(tabla).update(dataGuardar).eq("id", registro.id)
     : supabase.from(tabla).insert(dataGuardar);
@@ -559,6 +580,50 @@ export async function listarNotasVariasPersistidas(clasificacion: ClasificacionM
   return listarTabla("operativa_notas_varias", hidratarNotaVaria, clasificacion);
 }
 
+export async function listarOperativaParaConsultas(
+  clasificacion: ClasificacionMapa,
+  inyectada?: LecturaOperativaInyectada
+) {
+  const maestros = inyectada
+    ? await inyectada.cargarMaestros()
+    : await cargarMaestrosPersistencia();
+  const leerTabla = inyectada?.leerTabla;
+
+  const [
+    caja,
+    facturasEmitidas,
+    facturasRecibidas,
+    alquileres,
+    impuestos,
+    personal,
+    gastosBancarios,
+    creditos,
+    notasVarias,
+  ] = await Promise.all([
+    listarTabla("operativa_caja", hidratarCaja, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_facturas_emitidas", hidratarFacturaEmitida, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_facturas_recibidas", hidratarFacturaRecibida, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_alquileres", hidratarAlquiler, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_impuestos", hidratarImpuesto, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_personal", hidratarPersonal, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_gastos_bancarios", hidratarGastoBancario, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_creditos", hidratarCredito, clasificacion, maestros, leerTabla),
+    listarTabla("operativa_notas_varias", hidratarNotaVaria, clasificacion, maestros, leerTabla),
+  ]);
+
+  return {
+    caja,
+    facturasEmitidas,
+    facturasRecibidas,
+    alquileres,
+    impuestos,
+    personal,
+    gastosBancarios,
+    creditos,
+    notasVarias,
+  };
+}
+
 export async function guardarFacturaRecibidaPersistida(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
@@ -611,7 +676,8 @@ export async function guardarFacturaRecibidaPersistida(
       adjunto_url: metaAdjunto.url,
     },
     hidratarFacturaRecibida,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -667,7 +733,8 @@ export async function guardarFacturaEmitidaPersistida(
       adjunto_url: metaAdjunto.url,
     },
     hidratarFacturaEmitida,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -730,7 +797,8 @@ export async function guardarAlquilerPersistido(
       adjunto_url: metaAdjunto.url,
     },
     hidratarAlquiler,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -780,7 +848,8 @@ export async function guardarGastoBancarioPersistido(
       adjunto_url: metaAdjunto.url,
     },
     hidratarGastoBancario,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -829,7 +898,8 @@ export async function guardarCreditoPersistido(
       adjunto_url: metaAdjunto.url,
     },
     hidratarCredito,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -872,7 +942,8 @@ export async function guardarImpuestoPersistido(
       adjunto_url: metaAdjunto.url,
     },
     hidratarImpuesto,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -914,7 +985,8 @@ export async function guardarPersonalPersistido(
       adjunto_url: metaAdjunto.url,
     },
     hidratarPersonal,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -966,7 +1038,8 @@ export async function guardarCajaPersistida(
       adjunto_url: metaAdjunto.url,
     },
     hidratarCaja,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
 
@@ -1179,6 +1252,7 @@ export async function guardarNotaVariaPersistida(
       adjunto_url: metaAdjunto.url,
     },
     hidratarNotaVaria,
-    clasificacion
+    clasificacion,
+    maestros
   );
 }
