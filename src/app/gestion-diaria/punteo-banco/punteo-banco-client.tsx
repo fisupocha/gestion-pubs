@@ -7,7 +7,7 @@ import { formatearImporte } from "@/modules/punteo-banco/celdas";
 import { calcularCoberturaExtracto } from "@/modules/punteo-banco/cobertura-extracto";
 import { consultarMovimientos, type ConsultaMovimiento } from "@/modules/punteo-banco/consulta-movimientos";
 import {
-  LOCALES_PUNTEO,
+  LOCALES_PUNTEO_GUARDADOS,
   type ColumnaOrdenPunteo,
   type FiltroLocal,
 } from "@/modules/punteo-banco/locales-punteo";
@@ -643,7 +643,7 @@ export function PunteoBancoClient() {
                   className="h-8 max-w-[13.5rem] rounded-[8px] border border-[#e4d3ca] bg-white px-1.5 text-xs font-bold text-[#4b312b] outline-none"
                 >
                   <option value="todos">Orden original — Todos</option>
-                  {LOCALES_PUNTEO.map((local) => (
+                  {LOCALES_PUNTEO_GUARDADOS.map((local) => (
                     <option key={local} value={local}>
                       {local}
                     </option>
@@ -713,6 +713,9 @@ export function PunteoBancoClient() {
                   }
                 />
               ) : null}
+              <p className="text-xs leading-5 text-[#7b635c]">
+                Nuestro concepto y el local se guardan al salir del campo. El orden por concepto sigue el texto del banco.
+              </p>
               <div className="min-h-0 flex-1">
                 <TablaMovimientos
                   banco={bancoNombre}
@@ -732,6 +735,21 @@ export function PunteoBancoClient() {
                     );
                   }}
                   localEditable={conexionPunteoActiva()}
+                  marcasConcepto={conexionPunteoActiva() ? modo.marcasConcepto : undefined}
+                  onEditarConcepto={
+                    conexionPunteoActiva()
+                      ? (id, valor) => {
+                          modo.editarConcepto(id, valor);
+                        }
+                      : undefined
+                  }
+                  onConfirmarConcepto={
+                    conexionPunteoActiva()
+                      ? (id, valor) => {
+                          void modo.confirmarConcepto(id, valor);
+                        }
+                      : undefined
+                  }
                   onCambioLocal={
                     conexionPunteoActiva()
                       ? (id, local) => {

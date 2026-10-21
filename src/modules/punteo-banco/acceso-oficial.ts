@@ -4,8 +4,15 @@ import { lineasOficiales } from "./linea-oficial";
 import { mensajeErrorSeguro, type ResultadoOficial } from "./mensajes-importacion";
 import { identificarExcel } from "./importacion-doble";
 import { argumentosConsulta } from "./consulta-movimientos";
+import { planGuardarNuestroConcepto, type RespuestaConcepto } from "./guardado-nuestro-concepto";
 import { detallarMesTpv, type LineaTpvDetalle } from "./detalle-tpv";
-import { planGuardarLocal, type ColumnaOrdenPunteo, type FiltroLocal, type LocalPunteo } from "./locales-punteo";
+import {
+  localReconocido,
+  planGuardarLocal,
+  type ColumnaOrdenPunteo,
+  type FiltroLocal,
+  type LocalPunteo,
+} from "./locales-punteo";
 import { decisionPaginaTpv, sumarImportesTpv, TAMANO_PAGINA_TPV, type MesTpvOficial } from "./paginacion-tpv";
 import { asignarDevolucionCentimos, type LineaReparto } from "./reparto-abono-comision";
 import type { BancoPunteoId, EstadoOk } from "./modelo";
@@ -25,6 +32,7 @@ export type MovimientoOficial = {
   detallesOriginales: string;
   clase: ClaseMovimiento;
   observaciones: string;
+  nuestroConcepto: string;
   local: LocalPunteo | null;
   estado: EstadoOk;
   decisionProtegida: boolean;
@@ -82,6 +90,7 @@ type FilaMovimiento = {
   detalles_originales: string;
   clase: ClaseMovimiento;
   observaciones: string;
+  nuestro_concepto?: string;
   local?: string | null;
   estado: EstadoOk;
   decision_protegida: boolean;
@@ -520,6 +529,22 @@ export async function cambiarEstadoOficial(opciones: {
   });
 }
 
+export async function guardarNuestroConceptoOficial(movimientoId: number, texto: string): Promise<RespuestaConcepto> {
+  const plan = planGuardarNuestroConcepto(movimientoId, texto);
+
+  if (!plan.ok) {
+    return { ok: false, motivo: plan.motivo };
+  }
+
+  exigirConexionPunteo();
+  const respuesta = await ejecutar("punteo_guardar_nuestro_concepto", {
+    p_movimiento_id: plan.llamada.p_movimiento_id,
+    p_nuestro_concepto: plan.llamada.p_nuestro_concepto,
+  });
+
+  return respuesta as RespuestaConcepto;
+}
+
 export async function guardarLocalOficial(movimientoId: number, local: LocalPunteo | null) {
   const plan = planGuardarLocal(movimientoId, local);
 
@@ -631,6 +656,7 @@ function mapearMovimiento(fila: FilaMovimiento): MovimientoOficial {
     detallesOriginales: fila.detalles_originales,
     clase: fila.clase,
     observaciones: fila.observaciones,
+    nuestroConcepto: typeof fila.nuestro_concepto === "string" ? fila.nuestro_concepto : "",
     local: localLeido(fila.local),
     estado: fila.estado,
     decisionProtegida: fila.decision_protegida,
@@ -642,8 +668,8 @@ function mapearMovimiento(fila: FilaMovimiento): MovimientoOficial {
 }
 
 function localLeido(valor: string | null | undefined): LocalPunteo | null {
-  const plan = planGuardarLocal(0, valor ?? null);
-  return plan.ok ? plan.local : null;
+  const leido = localReconocido(valor ?? null);
+  return leido.ok ? leido.local : null;
 }
 
 function diasDelMes(anio: number, mes: number) {

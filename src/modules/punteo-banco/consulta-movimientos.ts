@@ -26,6 +26,7 @@ export type ConsultaMovimiento = {
   conceptoNormalizado: string;
   detallesOriginales: string;
   observaciones: string;
+  nuestroConcepto?: string;
   local: LocalPunteo | null;
   estado: string;
   clase: string;
@@ -97,6 +98,7 @@ export function textoConsultable(fila: ConsultaMovimiento) {
     fila.conceptoNormalizado,
     fila.detallesOriginales,
     fila.observaciones,
+    fila.nuestroConcepto ?? "",
     fila.local ?? "Sin asignar",
     fila.estado,
     estado,

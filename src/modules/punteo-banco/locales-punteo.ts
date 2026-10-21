@@ -1,6 +1,9 @@
-export const LOCALES_PUNTEO = ["Tarantino", "Hangar", "Cue", "Riverocio", "Fisu"] as const;
+export const LOCALES_PUNTEO = ["Tarantino", "Hangar", "Cue", "Riverocio", "Fisu", "Soho"] as const;
 
 export type LocalPunteo = (typeof LOCALES_PUNTEO)[number];
+
+/** Locales que la restricción y punteo_guardar_local aceptan. Soho solo existe en Punteo. */
+export const LOCALES_PUNTEO_GUARDADOS = ["Tarantino", "Hangar", "Cue", "Riverocio", "Fisu", "Soho"] as const;
 
 export type FiltroLocal = "todos" | "sin-asignar" | LocalPunteo;
 
@@ -19,9 +22,10 @@ export type ColumnaOrdenPunteo = (typeof COLUMNAS_ORDEN_PUNTEO)[number];
 
 export type AmbitoConsulta = "ordinarios" | "tpv";
 
-const AUTORIZADOS = new Set<string>(LOCALES_PUNTEO);
+const RECONOCIDOS = new Set<string>(LOCALES_PUNTEO);
+const GUARDADOS = new Set<string>(LOCALES_PUNTEO_GUARDADOS);
 
-export function localParaGuardar(valor: string | null):
+export function localReconocido(valor: string | null):
   | { ok: true; local: LocalPunteo | null }
   | { ok: false; motivo: string } {
   const texto = valor === null ? "" : valor.trim();
@@ -30,11 +34,27 @@ export function localParaGuardar(valor: string | null):
     return { ok: true, local: null };
   }
 
-  if (!AUTORIZADOS.has(texto)) {
+  if (!RECONOCIDOS.has(texto)) {
     return { ok: false, motivo: "El local no está autorizado." };
   }
 
   return { ok: true, local: texto as LocalPunteo };
+}
+
+export function localParaGuardar(valor: string | null):
+  | { ok: true; local: LocalPunteo | null }
+  | { ok: false; motivo: string } {
+  const reconocido = localReconocido(valor);
+
+  if (!reconocido.ok) {
+    return reconocido;
+  }
+
+  if (reconocido.local !== null && !GUARDADOS.has(reconocido.local)) {
+    return { ok: false, motivo: "El local no está autorizado." };
+  }
+
+  return reconocido;
 }
 
 export function encajaFiltroLocal(local: LocalPunteo | null, filtro: FiltroLocal) {

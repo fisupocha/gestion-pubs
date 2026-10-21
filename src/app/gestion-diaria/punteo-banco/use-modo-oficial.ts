@@ -7,6 +7,16 @@ import { conexionPunteoActiva } from "@/modules/punteo-banco/conexion-punteo";
 import { decidirConsulta, ejecutarCargaEnDosPartes, identificarExcel } from "@/modules/punteo-banco/importacion-doble";
 import { leerExtracto, type ResultadoLectura } from "@/modules/punteo-banco/leer-extracto";
 import { anexarSinDuplicar } from "@/modules/punteo-banco/consulta-movimientos";
+import {
+  aplicarFalloConcepto,
+  aplicarRespuestaConcepto,
+  borradorInicial,
+  combinarConceptos,
+  editarBorradorConcepto,
+  marcasDeConceptos,
+  prepararEnvioConcepto,
+  type BorradorConcepto,
+} from "@/modules/punteo-banco/guardado-nuestro-concepto";
 import { encajaFiltroLocal, type ColumnaOrdenPunteo, type FiltroLocal, type LocalPunteo } from "@/modules/punteo-banco/locales-punteo";
 import type { BancoPunteoId, EstadoOk, MovimientoPunteo } from "@/modules/punteo-banco/modelo";
 import type { MovimientoOficial, UltimoMovimientoOficial } from "@/modules/punteo-banco/acceso-oficial";
@@ -73,6 +83,9 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
   const bufferRef = useRef<ArrayBuffer | null>(null);
   const filasRef = useRef<MovimientoOficial[]>([]);
   const textosRef = useRef<Map<number, string>>(new Map());
+  const conceptosRef = useRef<Map<number, BorradorConcepto>>(new Map());
+  const cadenasConcepto = useRef<Map<number, Promise<void>>>(new Map());
+  const [marcasConcepto, setMarcasConcepto] = useState<Record<string, "pendiente" | "guardando" | "guardado" | "error">>({});
   const borradoresRef = useRef<Map<number, BorradorObservacion>>(new Map());
   const hayMasRef = useRef(false);
   const hayMasTpvRef = useRef(false);
@@ -161,9 +174,13 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
         }
 
         const siguientes = incorporarBorradores(paginaDatos.filas, borradoresRef.current);
+        const conceptos = combinarConceptos(siguientes.filas, conceptosRef.current);
         borradoresRef.current = siguientes.borradores;
+        conceptosRef.current = conceptos.borradores;
         setBorradores(siguientes.borradores);
-        setFilas(siguientes.filas);
+        setMarcasConcepto(marcasDeConceptos(conceptos.borradores.values()));
+        filasRef.current = conceptos.filas;
+        setFilas(conceptos.filas);
         desdeRef.current = paginaDatos.filas.length;
         setHayMas(paginaDatos.hayMas);
         hayMasRef.current = paginaDatos.hayMas;
@@ -694,9 +711,13 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
       desdeRef.current += paginaDatos.filas.length;
       const unidas = anexarSinDuplicar(filasRef.current, paginaDatos.filas);
       const siguientes = incorporarBorradores(unidas, borradoresRef.current);
+      const conceptos = combinarConceptos(siguientes.filas, conceptosRef.current);
       borradoresRef.current = siguientes.borradores;
+      conceptosRef.current = conceptos.borradores;
       setBorradores(siguientes.borradores);
-      setFilas(siguientes.filas);
+      setMarcasConcepto(marcasDeConceptos(conceptos.borradores.values()));
+      filasRef.current = conceptos.filas;
+      setFilas(conceptos.filas);
       setHayMas(paginaDatos.hayMas);
       hayMasRef.current = paginaDatos.hayMas;
       paginaDatos.filas.forEach((fila) => {
@@ -757,6 +778,105 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
       setCargando(false);
     }
   }, [anio, banco]);
+
+  const publicarConcepto = useCallback((borrador: BorradorConcepto) => {
+    const siguientes = new Map(conceptosRef.current);
+
+    if (borrador.fase === "quieto" && borrador.envio === null && borrador.visible.trim() === borrador.oficial) {
+      siguientes.delete(borrador.id);
+    } else {
+      siguientes.set(borrador.id, borrador);
+    }
+
+    conceptosRef.current = siguientes;
+    setMarcasConcepto(marcasDeConceptos(siguientes.values()));
+    setFilas((previas) =>
+      previas.map((fila) =>
+        fila.id === borrador.id
+          ? {
+              ...fila,
+              nuestroConcepto: borrador.visible,
+              estado: fila.estado,
+              local: fila.local,
+              observaciones: fila.observaciones,
+            }
+          : fila
+      )
+    );
+    if (filasRef.current.some((fila) => fila.id === borrador.id)) {
+      filasRef.current = filasRef.current.map((fila) =>
+        fila.id === borrador.id ? { ...fila, nuestroConcepto: borrador.visible } : fila
+      );
+    }
+  }, []);
+
+  const drenarConcepto = useCallback(async (id: number) => {
+    for (let paso = 0; paso < 5; paso += 1) {
+      const filaInicial = filasRef.current.find((fila) => fila.id === id);
+      const actual = conceptosRef.current.get(id) ?? borradorInicial(id, filaInicial?.nuestroConcepto ?? "");
+      const preparado = prepararEnvioConcepto(actual);
+      publicarConcepto(preparado.borrador);
+
+      if (preparado.accion !== "enviar") {
+        return;
+      }
+
+      const fila = filasRef.current.find((item) => item.id === id);
+
+      if (!fila) {
+        return;
+      }
+
+      const contexto = {
+        estado: fila.estado,
+        local: fila.local,
+        observaciones: fila.observaciones,
+        conceptoOriginal: fila.conceptoOriginal,
+      };
+
+      try {
+        const acceso = await import("@/modules/punteo-banco/acceso-oficial");
+        const resultado = await acceso.guardarNuestroConceptoOficial(id, preparado.texto);
+        const vigente = conceptosRef.current.get(id) ?? preparado.borrador;
+        const aplicado = aplicarRespuestaConcepto(vigente, preparado.generacion, resultado, contexto);
+        publicarConcepto(aplicado.borrador);
+
+        if (!aplicado.reintentar) {
+          return;
+        }
+      } catch (error: unknown) {
+        const vigente = conceptosRef.current.get(id) ?? preparado.borrador;
+        const aplicado = aplicarFalloConcepto(
+          vigente,
+          preparado.generacion,
+          error instanceof Error
+            ? `${error.message} No se ha guardado nuestro concepto. El texto sigue en pantalla.`
+            : "No se ha guardado nuestro concepto. El texto sigue en pantalla."
+        );
+        publicarConcepto(aplicado.borrador);
+
+        if (!aplicado.reintentar) {
+          return;
+        }
+      }
+    }
+  }, [publicarConcepto]);
+
+  const editarConcepto = useCallback((id: string, valor: string) => {
+    const numerico = Number(id);
+    const fila = filasRef.current.find((actual) => actual.id === numerico);
+    const actual = conceptosRef.current.get(numerico) ?? borradorInicial(numerico, fila?.nuestroConcepto ?? "");
+    publicarConcepto(editarBorradorConcepto(actual, valor));
+  }, [publicarConcepto]);
+
+  const confirmarConcepto = useCallback((id: string, valor: string) => {
+    const numerico = Number(id);
+    editarConcepto(id, valor);
+    const previa = cadenasConcepto.current.get(numerico) ?? Promise.resolve();
+    const siguiente = previa.catch(() => undefined).then(() => drenarConcepto(numerico));
+    cadenasConcepto.current.set(numerico, siguiente);
+    return siguiente;
+  }, [drenarConcepto, editarConcepto]);
 
   const guardarLocal = useCallback(async (id: string, local: LocalPunteo | null): Promise<AvisoPunteo> => {
     const numerico = Number(id);
@@ -836,6 +956,7 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
     importe: formatearCentimos(fila.importeCentimos),
     concepto: fila.conceptoOriginal,
     observaciones: fila.observaciones,
+    nuestroConcepto: fila.nuestroConcepto,
     local: fila.local,
     ok: fila.estado,
     orden: fila.ordenBanco,
@@ -853,6 +974,9 @@ export function useModoOficial(banco: BancoPunteoId, anio: number, consulta: Con
     cargarMas,
     cargarMasTpv,
     guardarLocal,
+    editarConcepto,
+    confirmarConcepto,
+    marcasConcepto,
     errorLectura,
     meses,
     movimientos,

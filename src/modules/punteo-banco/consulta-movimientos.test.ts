@@ -8,10 +8,10 @@ import {
   recorrerConsulta,
   type ConsultaMovimiento,
 } from "./consulta-movimientos";
-import { LOCALES_PUNTEO, planGuardarLocal } from "./locales-punteo";
+import { LOCALES_PUNTEO, LOCALES_PUNTEO_GUARDADOS, localReconocido, planGuardarLocal } from "./locales-punteo";
 
-test("los cinco locales se aceptan y uno ajeno se rechaza sin tocar el estado", () => {
-  for (const local of LOCALES_PUNTEO) {
+test("los locales de Punteo, incluido Soho, se guardan con la función oficial", () => {
+  for (const local of LOCALES_PUNTEO_GUARDADOS) {
     const plan = planGuardarLocal(12, local);
     assert.equal(plan.ok, true);
     if (plan.ok) {
@@ -20,6 +20,14 @@ test("los cinco locales se aceptan y uno ajeno se rechaza sin tocar el estado", 
       assert.equal(plan.llamada.funcion, "punteo_guardar_local");
       assert.equal("estado" in plan.llamada, false);
     }
+  }
+
+  assert.equal(LOCALES_PUNTEO.includes("Soho"), true);
+  assert.equal(localReconocido("Soho").ok, true);
+  const soho = planGuardarLocal(12, "Soho");
+  assert.equal(soho.ok, true);
+  if (soho.ok) {
+    assert.equal(soho.llamada.p_local, "Soho");
   }
 
   assert.equal(planGuardarLocal(12, null).ok, true);
@@ -161,6 +169,42 @@ test("las coincidencias TPV no se mezclan con las ordinarias", () => {
   );
 });
 
+test("la búsqueda encuentra nuestro concepto y el orden por concepto sigue el texto bancario", () => {
+  const filas = [
+    fila(1, { conceptoOriginal: "Zeta banco", nuestroConcepto: "Alfa propio", local: "Soho" }),
+    fila(2, { conceptoOriginal: "Alfa banco", nuestroConcepto: "Zeta propio", local: "Cue" }),
+  ];
+  const porConcepto = consultarMovimientos(filas, base({ columna: "concepto", ascendente: true, busqueda: "" }));
+  assert.deepEqual(
+    porConcepto.filas.map((actual) => actual.id),
+    [2, 1]
+  );
+
+  const propio = consultarMovimientos(filas, base({ busqueda: "alfa propio" }));
+  assert.deepEqual(
+    propio.filas.map((actual) => actual.id),
+    [1]
+  );
+
+  const bancario = consultarMovimientos(filas, base({ busqueda: "zeta banco" }));
+  assert.deepEqual(
+    bancario.filas.map((actual) => actual.id),
+    [1]
+  );
+
+  const soho = consultarMovimientos(filas, base({ filtroLocal: "Soho" }));
+  assert.deepEqual(
+    soho.filas.map((actual) => actual.id),
+    [1]
+  );
+
+  const cue = consultarMovimientos(filas, base({ filtroLocal: "Cue" }));
+  assert.deepEqual(
+    cue.filas.map((actual) => actual.id),
+    [2]
+  );
+});
+
 test("la consulta pide a Supabase el desplazamiento, el local y el texto", () => {
   assert.deepEqual(
     argumentosConsulta({
@@ -186,6 +230,17 @@ test("la consulta pide a Supabase el desplazamiento, el local y el texto", () =>
       p_limite: 100,
     }
   );
+  assert.equal("p_nuestro_concepto" in argumentosConsulta({
+    banco: "ibercaja",
+    anio: 2026,
+    filtroLocal: "Soho",
+    busqueda: "",
+    columna: "orden_banco",
+    ascendente: false,
+    ambito: "ordinarios",
+    desde: 0,
+    limite: 100,
+  }), false);
   assert.deepEqual(anexarSinDuplicar([{ id: 3 }, { id: 2 }], [{ id: 2 }, { id: 1 }]), [
     { id: 3 },
     { id: 2 },

@@ -25,6 +25,7 @@ const COLOR_LOCAL: Record<LocalPunteo, string> = {
   Cue: "bg-[#eadcf8] text-[#5b2d86]",
   Riverocio: "bg-[#d4f3ea] text-[#0f5c4c]",
   Fisu: "bg-[#f8d6e8] text-[#8a2d5c]",
+  Soho: "bg-[#f6f0d4] text-[#5c5220]",
 };
 
 export function CoincidenciasTpv({ filas, hayMas, onMas }: CoincidenciasTpvProps) {

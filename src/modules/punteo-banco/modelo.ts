@@ -48,6 +48,8 @@ export type MovimientoPunteo = {
   fechaValor: string;
   importe: string;
   concepto: string;
+  /** Texto del usuario. Vacío significa que la fila muestra el concepto bancario. */
+  nuestroConcepto?: string;
   observaciones: string;
   /** NULL en base es Sin asignar. */
   local: LocalPunteo | null;

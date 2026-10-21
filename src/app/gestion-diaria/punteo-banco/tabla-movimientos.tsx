@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ColumnaOrdenPunteo, LocalPunteo } from "@/modules/punteo-banco/locales-punteo";
 import { LOCALES_PUNTEO } from "@/modules/punteo-banco/locales-punteo";
 import type { EstadoOk, MovimientoPunteo } from "@/modules/punteo-banco/modelo";
+import { aplicarAlturaAlContenido } from "@/modules/punteo-banco/altura-campo";
+import { conceptoBancarioSecundario, textoPrincipalMovimiento } from "@/modules/punteo-banco/presentacion-concepto";
 import { tarjetaPunteo } from "./clases";
 
 type TablaMovimientosProps = {
@@ -17,8 +19,11 @@ type TablaMovimientosProps = {
   onCambioLocal?: (id: string, local: LocalPunteo | null) => void;
   localEditable?: boolean;
   onConfirmarObservacion?: (id: string, valor: string) => void;
+  onEditarConcepto?: (id: string, valor: string) => void;
+  onConfirmarConcepto?: (id: string, valor: string) => void;
   textoVacio?: string;
   marcas?: Record<string, "pendiente" | "error" | "conflicto">;
+  marcasConcepto?: Record<string, "pendiente" | "guardando" | "guardado" | "error">;
   onLlegarAlFinal?: () => void;
 };
 
@@ -34,6 +39,7 @@ const COLOR_LOCAL: Record<LocalPunteo, string> = {
   Cue: "border-[#d2b6ee] bg-[#eadcf8] text-[#5b2d86]",
   Riverocio: "border-[#9ed9c8] bg-[#d4f3ea] text-[#0f5c4c]",
   Fisu: "border-[#e7b0cc] bg-[#f8d6e8] text-[#8a2d5c]",
+  Soho: "border-[#d2c48a] bg-[#f6f0d4] text-[#5c5220]",
 };
 
 const COLOR_SIN_LOCAL = "border-[#dac4b8] bg-white text-[#4b312b]";
@@ -49,12 +55,16 @@ export function TablaMovimientos({
   onCambioLocal,
   localEditable = false,
   onConfirmarObservacion,
+  onEditarConcepto,
+  onConfirmarConcepto,
   textoVacio,
   marcas,
+  marcasConcepto,
   onLlegarAlFinal,
 }: TablaMovimientosProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const finalRef = useRef<HTMLDivElement>(null);
+  const [conceptoLocal, setConceptoLocal] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!onLlegarAlFinal) {
@@ -87,7 +97,6 @@ export function TablaMovimientos({
         <table className="w-full min-w-[60rem] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[6.5rem]" />
-            <col className="w-[7rem]" />
             <col className="w-[6.75rem]" />
             <col />
             <col />
@@ -100,13 +109,6 @@ export function TablaMovimientos({
               <CabeceraOrden
                 columna="fecha_operacion"
                 etiqueta="Fecha"
-                activa={columnaOrden}
-                ascendente={ascendente}
-                onOrdenar={onOrdenar}
-              />
-              <CabeceraOrden
-                columna="fecha_valor"
-                etiqueta="Fecha valor"
                 activa={columnaOrden}
                 ascendente={ascendente}
                 onOrdenar={onOrdenar}
@@ -159,24 +161,53 @@ export function TablaMovimientos({
           </thead>
           <tbody>
             {movimientos.length > 0 ? (
-              movimientos.map((movimiento) => (
+              movimientos.map((movimiento) => {
+                const propio = onEditarConcepto
+                  ? (movimiento.nuestroConcepto ?? "")
+                  : (conceptoLocal[movimiento.id] ?? movimiento.nuestroConcepto ?? "");
+                const bancario = movimiento.concepto;
+                const principal = textoPrincipalMovimiento(propio, bancario);
+                const secundario = conceptoBancarioSecundario(propio, bancario);
+                const localVisible = movimiento.local;
+                const marcaConcepto = marcasConcepto?.[movimiento.id];
+
+                return (
                 <tr key={movimiento.id} className="bg-white/75 text-sm leading-5 text-[#4b312b]">
                   <td className="border border-[#ecdbd5] px-1.5 py-1 align-top whitespace-nowrap">
                     {movimiento.fecha}
                   </td>
-                  <td className="border border-[#ecdbd5] px-1.5 py-1 align-top whitespace-nowrap">
-                    {movimiento.fechaValor || "—"}
-                  </td>
                   <td className="border border-[#ecdbd5] px-1.5 py-1 text-right align-top font-semibold whitespace-nowrap tabular-nums">
                     {movimiento.importe}
                   </td>
-                  <td className="border border-[#ecdbd5] px-1.5 py-1 align-top break-words">
-                    {movimiento.concepto}
+                  <td className="border border-[#ecdbd5] px-1.5 py-0.5 align-top break-words">
+                    <ConceptoCampo
+                      valor={propio}
+                      principal={principal}
+                      secundario={secundario}
+                      marca={marcaConcepto}
+                      etiqueta={`Nuestro concepto de ${bancario || movimiento.fecha}`}
+                      onChange={(valor) => {
+                        if (onEditarConcepto) {
+                          onEditarConcepto(movimiento.id, valor);
+                          return;
+                        }
+
+                        setConceptoLocal((previo) => ({
+                          ...previo,
+                          [movimiento.id]: valor,
+                        }));
+                      }}
+                      onBlur={
+                        onConfirmarConcepto
+                          ? (valor) => onConfirmarConcepto(movimiento.id, valor)
+                          : undefined
+                      }
+                    />
                   </td>
                   <td className="border border-[#ecdbd5] px-1.5 py-0.5 align-top">
                     <ObservacionCampo
                       value={movimiento.observaciones}
-                      etiqueta={`Observaciones de ${movimiento.concepto || movimiento.fecha}`}
+                      etiqueta={`Observaciones de ${principal}`}
                       onChange={(valor) => onCambio(movimiento.id, "observaciones", valor)}
                       onBlur={
                         onConfirmarObservacion
@@ -198,17 +229,15 @@ export function TablaMovimientos({
                   </td>
                   <td className="border border-[#ecdbd5] px-1 py-0.5 align-top">
                     <select
-                      value={movimiento.local ?? ""}
+                      value={localVisible ?? ""}
                       disabled={!localEditable}
-                      aria-label={`Local de ${movimiento.concepto || movimiento.fecha}`}
-                      onChange={(event) =>
-                        onCambioLocal?.(
-                          movimiento.id,
-                          event.target.value === "" ? null : (event.target.value as LocalPunteo)
-                        )
-                      }
+                      aria-label={`Local de ${principal}`}
+                      onChange={(event) => {
+                        const valor = event.target.value;
+                        onCambioLocal?.(movimiento.id, valor === "" ? null : (valor as LocalPunteo));
+                      }}
                       className={`w-full rounded-[6px] border px-1 py-0.5 text-[13px] font-semibold leading-5 outline-none ${
-                        movimiento.local ? COLOR_LOCAL[movimiento.local] : COLOR_SIN_LOCAL
+                        localVisible ? COLOR_LOCAL[localVisible] : COLOR_SIN_LOCAL
                       }`}
                     >
                       <option value="">Sin asignar</option>
@@ -222,7 +251,7 @@ export function TablaMovimientos({
                   <td className={`border px-1.5 py-0.5 align-top ${COLOR_ESTADO[movimiento.ok]}`}>
                     <select
                       value={movimiento.ok}
-                      aria-label={`Estado de ${movimiento.concepto || movimiento.fecha}`}
+                      aria-label={`Estado de ${principal}`}
                       onChange={(event) => onCambio(movimiento.id, "ok", event.target.value)}
                       className={`w-full rounded-[6px] border px-1 py-0.5 text-sm font-semibold leading-5 outline-none ${COLOR_ESTADO[movimiento.ok]}`}
                     >
@@ -233,11 +262,12 @@ export function TablaMovimientos({
                   </td>
                   <td className="border border-[#ecdbd5] px-1 py-1 text-right align-top tabular-nums">{movimiento.orden}</td>
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={7}
                   className="border border-[#ecdbd5] px-3 py-3 text-center text-sm text-[#7b635c]"
                 >
                   {textoVacio ?? `Sin movimientos de ${banco} en ${anio}.`}
@@ -286,6 +316,92 @@ function CabeceraOrden({
   );
 }
 
+function ConceptoCampo({
+  valor,
+  principal,
+  secundario,
+  marca,
+  etiqueta,
+  onChange,
+  onBlur,
+}: {
+  valor: string;
+  principal: string;
+  secundario: string | null;
+  marca?: "pendiente" | "guardando" | "guardado" | "error";
+  etiqueta: string;
+  onChange: (valor: string) => void;
+  onBlur?: (valor: string) => void;
+}) {
+  const campoRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const campo = campoRef.current;
+
+    if (!campo) {
+      return;
+    }
+
+    aplicarAlturaAlContenido(campo);
+  }, [valor, secundario]);
+
+  const campo =
+    "block w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-[6px] border bg-white px-1 py-0 leading-4 outline-none";
+
+  return (
+    <div>
+      {secundario ? (
+        <textarea
+          ref={campoRef}
+          value={valor}
+          rows={1}
+          aria-label={etiqueta}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
+          className={`${campo} border-[#dac4b8] text-sm font-semibold text-[#4b312b]`}
+        />
+      ) : (
+        <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-4 text-[#4b312b]">{principal}</p>
+      )}
+      {secundario ? (
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] leading-4 text-[#8b695d]">{secundario}</p>
+      ) : (
+        <textarea
+          ref={campoRef}
+          value={valor}
+          rows={1}
+          aria-label={etiqueta}
+          placeholder="Nuestro concepto"
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
+          className={`${campo} mt-0.5 border-[#eadfd8] text-[13px] text-[#4b312b] placeholder:text-[#a08b84]`}
+        />
+      )}
+      <EstadoConcepto marca={marca} />
+    </div>
+  );
+}
+
+function EstadoConcepto({ marca }: { marca?: "pendiente" | "guardando" | "guardado" | "error" }) {
+  if (marca === "guardando") {
+    return <span className="mt-0.5 block text-[11px] leading-4 text-[#7a3d2c]">Guardando…</span>;
+  }
+
+  if (marca === "guardado") {
+    return <span className="mt-0.5 block text-[11px] leading-4 text-[#1f5c32]">Guardado</span>;
+  }
+
+  if (marca === "error") {
+    return <span className="mt-0.5 block text-[11px] leading-4 font-semibold text-[#7a3028]">No se ha guardado</span>;
+  }
+
+  if (marca === "pendiente") {
+    return <span className="mt-0.5 block text-[11px] leading-4 text-[#7a3d2c]">Pendiente de guardar</span>;
+  }
+
+  return null;
+}
+
 function ObservacionCampo({
   value,
   etiqueta,
@@ -306,8 +422,7 @@ function ObservacionCampo({
       return;
     }
 
-    campo.style.height = "auto";
-    campo.style.height = `${campo.scrollHeight}px`;
+    aplicarAlturaAlContenido(campo);
   }, [value]);
 
   return (
@@ -318,7 +433,7 @@ function ObservacionCampo({
       aria-label={etiqueta}
       onChange={(event) => onChange(event.target.value)}
       onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
-      className="block w-full resize-none overflow-hidden rounded-[6px] border border-[#dac4b8] bg-white px-1.5 py-0.5 text-sm leading-5 outline-none"
+      className="block w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-[6px] border border-[#dac4b8] bg-white px-1 py-0 text-sm leading-4 outline-none"
     />
   );
 }

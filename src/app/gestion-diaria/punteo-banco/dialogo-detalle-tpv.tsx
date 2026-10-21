@@ -129,7 +129,6 @@ function Cuerpo({
           <thead>
             <tr className="bg-[#f7ece7] text-left text-[11px] font-black uppercase tracking-[0.04em] text-[#8b695d]">
               <th className="border border-[#e4d3ca] px-1.5 py-1">Fecha</th>
-              <th className="border border-[#e4d3ca] px-1.5 py-1">Fecha valor</th>
               <th className="border border-[#e4d3ca] px-1.5 py-1">Concepto y detalle</th>
               <th className="border border-[#e4d3ca] px-1.5 py-1">Terminal</th>
               <th className="border border-[#e4d3ca] px-1.5 py-1 text-right">Importe banco</th>
@@ -140,7 +139,7 @@ function Cuerpo({
           <tbody>
             {detalle.filas.length === 0 ? (
               <tr>
-                <td colSpan={7} className="border border-[#ecdbd5] px-2 py-3 text-center text-[#7b635c]">
+                <td colSpan={6} className="border border-[#ecdbd5] px-2 py-3 text-center text-[#7b635c]">
                   Este mes no tiene movimientos TPV.
                 </td>
               </tr>
@@ -148,9 +147,6 @@ function Cuerpo({
               detalle.filas.map((fila) => (
                 <tr key={fila.id} className={fila.esAbonoBancario ? "bg-[#f8e8bc]" : "bg-white/70"}>
                   <td className="border border-[#ecdbd5] px-1.5 py-1 whitespace-nowrap">{formatearFechaIso(fila.fecha)}</td>
-                  <td className="border border-[#ecdbd5] px-1.5 py-1 whitespace-nowrap">
-                    {fila.fechaValor ? formatearFechaIso(fila.fechaValor) : "—"}
-                  </td>
                   <td className="border border-[#ecdbd5] px-1.5 py-1">
                     <span className="block">{fila.conceptoOriginal || "—"}</span>
                     {fila.detallesOriginales ? (
