@@ -1,19 +1,5 @@
-export function textoPrincipalMovimiento(nuestroConcepto: string, conceptoBancario: string) {
-  const propio = nuestroConcepto.trim();
-
-  if (propio) {
-    return propio;
-  }
-
+export function presentacionConcepto(nuestroConcepto: string, conceptoBancario: string): [string, string | null] {
   const banco = conceptoBancario.trim();
-  return banco || "Sin concepto";
-}
 
-export function conceptoBancarioSecundario(nuestroConcepto: string, conceptoBancario: string) {
-  if (!nuestroConcepto.trim()) {
-    return null;
-  }
-
-  const banco = conceptoBancario.trim();
-  return banco || null;
+  return [nuestroConcepto, banco || null];
 }

@@ -5,7 +5,7 @@ import type { ColumnaOrdenPunteo, LocalPunteo } from "@/modules/punteo-banco/loc
 import { LOCALES_PUNTEO } from "@/modules/punteo-banco/locales-punteo";
 import type { EstadoOk, MovimientoPunteo } from "@/modules/punteo-banco/modelo";
 import { aplicarAlturaAlContenido } from "@/modules/punteo-banco/altura-campo";
-import { conceptoBancarioSecundario, textoPrincipalMovimiento } from "@/modules/punteo-banco/presentacion-concepto";
+import { presentacionConcepto } from "@/modules/punteo-banco/presentacion-concepto";
 import { tarjetaPunteo } from "./clases";
 
 type TablaMovimientosProps = {
@@ -165,9 +165,8 @@ export function TablaMovimientos({
                 const propio = onEditarConcepto
                   ? (movimiento.nuestroConcepto ?? "")
                   : (conceptoLocal[movimiento.id] ?? movimiento.nuestroConcepto ?? "");
-                const bancario = movimiento.concepto;
-                const principal = textoPrincipalMovimiento(propio, bancario);
-                const secundario = conceptoBancarioSecundario(propio, bancario);
+                const [nuestroVisible, bancoVisible] = presentacionConcepto(propio, movimiento.concepto);
+                const referencia = bancoVisible || nuestroVisible.trim() || movimiento.fecha;
                 const localVisible = movimiento.local;
                 const marcaConcepto = marcasConcepto?.[movimiento.id];
 
@@ -181,11 +180,10 @@ export function TablaMovimientos({
                   </td>
                   <td className="border border-[#ecdbd5] px-1.5 py-0.5 align-top break-words">
                     <ConceptoCampo
-                      valor={propio}
-                      principal={principal}
-                      secundario={secundario}
+                      valor={nuestroVisible}
+                      conceptoBancario={bancoVisible}
                       marca={marcaConcepto}
-                      etiqueta={`Nuestro concepto de ${bancario || movimiento.fecha}`}
+                      etiqueta={`Nuestro concepto de ${referencia}`}
                       onChange={(valor) => {
                         if (onEditarConcepto) {
                           onEditarConcepto(movimiento.id, valor);
@@ -207,7 +205,7 @@ export function TablaMovimientos({
                   <td className="border border-[#ecdbd5] px-1.5 py-0.5 align-top">
                     <ObservacionCampo
                       value={movimiento.observaciones}
-                      etiqueta={`Observaciones de ${principal}`}
+                      etiqueta={`Observaciones de ${referencia}`}
                       onChange={(valor) => onCambio(movimiento.id, "observaciones", valor)}
                       onBlur={
                         onConfirmarObservacion
@@ -231,7 +229,7 @@ export function TablaMovimientos({
                     <select
                       value={localVisible ?? ""}
                       disabled={!localEditable}
-                      aria-label={`Local de ${principal}`}
+                      aria-label={`Local de ${referencia}`}
                       onChange={(event) => {
                         const valor = event.target.value;
                         onCambioLocal?.(movimiento.id, valor === "" ? null : (valor as LocalPunteo));
@@ -251,7 +249,7 @@ export function TablaMovimientos({
                   <td className={`border px-1.5 py-0.5 align-top ${COLOR_ESTADO[movimiento.ok]}`}>
                     <select
                       value={movimiento.ok}
-                      aria-label={`Estado de ${principal}`}
+                      aria-label={`Estado de ${referencia}`}
                       onChange={(event) => onCambio(movimiento.id, "ok", event.target.value)}
                       className={`w-full rounded-[6px] border px-1 py-0.5 text-sm font-semibold leading-5 outline-none ${COLOR_ESTADO[movimiento.ok]}`}
                     >
@@ -318,16 +316,14 @@ function CabeceraOrden({
 
 function ConceptoCampo({
   valor,
-  principal,
-  secundario,
+  conceptoBancario,
   marca,
   etiqueta,
   onChange,
   onBlur,
 }: {
   valor: string;
-  principal: string;
-  secundario: string | null;
+  conceptoBancario: string | null;
   marca?: "pendiente" | "guardando" | "guardado" | "error";
   etiqueta: string;
   onChange: (valor: string) => void;
@@ -343,40 +339,26 @@ function ConceptoCampo({
     }
 
     aplicarAlturaAlContenido(campo);
-  }, [valor, secundario]);
+  }, [valor]);
 
   const campo =
     "block w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-[6px] border bg-white px-1 py-0 leading-4 outline-none";
 
   return (
     <div>
-      {secundario ? (
-        <textarea
-          ref={campoRef}
-          value={valor}
-          rows={1}
-          aria-label={etiqueta}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
-          className={`${campo} border-[#dac4b8] text-sm font-semibold text-[#4b312b]`}
-        />
-      ) : (
-        <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-4 text-[#4b312b]">{principal}</p>
-      )}
-      {secundario ? (
-        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] leading-4 text-[#8b695d]">{secundario}</p>
-      ) : (
-        <textarea
-          ref={campoRef}
-          value={valor}
-          rows={1}
-          aria-label={etiqueta}
-          placeholder="Nuestro concepto"
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
-          className={`${campo} mt-0.5 border-[#eadfd8] text-[13px] text-[#4b312b] placeholder:text-[#a08b84]`}
-        />
-      )}
+      <textarea
+        ref={campoRef}
+        value={valor}
+        rows={1}
+        aria-label={etiqueta}
+        placeholder="Nuestro concepto"
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur ? (event) => onBlur(event.target.value) : undefined}
+        className={`${campo} border-[#dac4b8] text-sm font-semibold text-[#4b312b] placeholder:text-[#a08b84]`}
+      />
+      {conceptoBancario ? (
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] leading-4 text-[#8b695d]">{conceptoBancario}</p>
+      ) : null}
       <EstadoConcepto marca={marca} />
     </div>
   );
