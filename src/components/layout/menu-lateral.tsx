@@ -49,6 +49,14 @@ function MarcaCargaEnlace({
   );
 }
 
+function sinPrecargaAutomatica(href: string) {
+  return (
+    href === "/gestion-diaria/punteo-banco" ||
+    href === "/gestion-diaria/caja-diaria" ||
+    href === "/maestros/varios"
+  );
+}
+
 function MenuLink({
   href,
   label,
@@ -67,6 +75,7 @@ function MenuLink({
   return (
     <Link
       href={href}
+      prefetch={sinPrecargaAutomatica(href) ? false : undefined}
       onClick={onClick}
       target={abrirEnNuevaPestana ? "_blank" : undefined}
       rel={abrirEnNuevaPestana ? "noreferrer" : undefined}
