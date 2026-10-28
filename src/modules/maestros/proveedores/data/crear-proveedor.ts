@@ -3,27 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { crearSupabaseServidor } from "@/lib/supabase-servidor";
+import { guardarProveedorOficial } from "./guardar-proveedor";
 
 export async function crearProveedor(formData: FormData) {
   const supabase = await crearSupabaseServidor();
-  const nombre = formData.get("nombre")?.toString().trim() ?? "";
-  const cif = formData.get("cif")?.toString().trim().toUpperCase() ?? "";
+  const resultado = await guardarProveedorOficial(supabase, formData.get("nombre")?.toString() ?? "", formData.get("cif")?.toString() ?? "");
 
-  if (!nombre || !cif) {
-    redirect("/maestros/proveedores?tipo=error&mensaje=Completa%20nombre%20y%20CIF");
-  }
-
-  const { error } = await supabase.from("proveedores").insert({
-    nombre,
-    cif,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      redirect("/maestros/proveedores?tipo=error&mensaje=Ya%20existe%20un%20proveedor%20con%20ese%20CIF");
-    }
-
-    redirect("/maestros/proveedores?tipo=error&mensaje=No%20se%20pudo%20guardar%20el%20proveedor");
+  if (!resultado.ok) {
+    const mensaje = encodeURIComponent(resultado.mensaje);
+    redirect(`/maestros/proveedores?tipo=error&mensaje=${mensaje}`);
   }
 
   revalidatePath("/maestros/proveedores");

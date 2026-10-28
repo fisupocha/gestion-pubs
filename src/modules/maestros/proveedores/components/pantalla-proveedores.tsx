@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react";
 type Proveedor = {
   id: number;
   nombre: string;
-  cif: string;
+  cif: string | null;
 };
 
 type AccionProveedor = (formData: FormData) => void | Promise<void>;
@@ -57,7 +57,7 @@ export function PantallaProveedores({
 
     return proveedores.filter((proveedor) => {
       const nombreNormalizado = proveedor.nombre.toLowerCase();
-      const cifNormalizado = proveedor.cif.toLowerCase();
+      const cifNormalizado = (proveedor.cif ?? "").toLowerCase();
       return nombreNormalizado.includes(termino) || cifNormalizado.includes(termino);
     });
   }, [proveedores, textoBusqueda]);
@@ -65,7 +65,7 @@ export function PantallaProveedores({
   function seleccionarProveedor(proveedor: Proveedor) {
     setProveedorSeleccionadoId(proveedor.id);
     setNombre(proveedor.nombre);
-    setCif(proveedor.cif);
+    setCif(proveedor.cif ?? "");
   }
 
   function prepararNuevo() {
@@ -154,14 +154,14 @@ export function PantallaProveedores({
               </label>
 
               <label className="grid gap-1.5">
-                <span className={labelClassName}>CIF</span>
+                <span className={labelClassName}>CIF propio (vacío si no consta)</span>
                 <input
                   name="cif"
                   type="text"
                   value={cif}
                   onChange={(e) => setCif(e.target.value.toUpperCase())}
                   className={inputClassName}
-                  placeholder="CIF"
+                  placeholder="No consta, si se deja vacío"
                 />
               </label>
             </div>
@@ -256,7 +256,7 @@ export function PantallaProveedores({
                         }
                       >
                         <span className="font-semibold">{proveedor.nombre}</span>
-                        <span className="font-medium text-[#6e5751]">{proveedor.cif}</span>
+                        <span className="font-medium text-[#6e5751]">{proveedor.cif ?? "No consta"}</span>
                         <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#98786f]">
                           ID {proveedor.id}
                         </span>
