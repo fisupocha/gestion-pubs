@@ -63,7 +63,7 @@ export async function cargarOperativaConsultas(
       normalizarRegistro(item as unknown as Record<string, unknown>)
     ),
     facturasRecibidas: facturasRecibidas.map((item) =>
-      normalizarRegistro(item as unknown as Record<string, unknown>)
+      ({...normalizarRegistro(item as unknown as Record<string, unknown>), ...(item.ivaManual !== undefined ? {ivaManual: item.ivaManual} : {})})
     ),
     alquileres: alquileres.map((item) =>
       normalizarRegistro(item as unknown as Record<string, unknown>)

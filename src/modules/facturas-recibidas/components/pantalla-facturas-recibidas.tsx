@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { AvisoCargaSeccion } from "@/components/ui/aviso-carga-seccion";
 import { CampoFecha } from "@/components/ui/campo-fecha";
+import { cuotasFacturaRecibida, tiposIvaRecibida, type IvaManualRecibida } from "../iva-manual";
 import { leerFacturaAdjunta } from "@/lib/facturas/lector-adjunto";
 import { abrirAdjuntoOperativa, prepararGuardadoAdjuntoOperativa } from "@/lib/operativa/adjuntos-storage";
 import type { ClasificacionMapa } from "@/lib/clasificacion";
@@ -30,6 +31,7 @@ type FormularioFactura = {
   base4: string;
   base10: string;
   base21: string;
+  ivaManual?: IvaManualRecibida | null;
   pagado: boolean;
   fechaPago: string;
   formaPago: string;
@@ -87,6 +89,7 @@ function formularioDesdeRegistro(registro: RegistroFactura): FormularioFactura {
     base4: registro.base4,
     base10: registro.base10,
     base21: registro.base21,
+    ivaManual: registro.ivaManual,
     pagado: registro.pagado,
     fechaPago: registro.fechaPago,
     formaPago: registro.formaPago,
@@ -373,7 +376,11 @@ export function PantallaFacturasRecibidas({
   const iva10 = round2((base10 * 10) / 100);
   const iva21 = round2((base21 * 21) / 100);
   const totalBase = round2(base0 + base4 + base10 + base21);
-  const totalIva = round2(iva4 + iva10 + iva21);
+  let errorIva = "";
+  let desgloseManual: ReturnType<typeof cuotasFacturaRecibida> | undefined;
+  try { desgloseManual = cuotasFacturaRecibida({base0,base4,base10,base21},formulario.ivaManual); }
+  catch (e) { errorIva = e instanceof Error ? e.message : "Revisa el IVA."; }
+  const totalIva = formulario.ivaManual && Object.keys(formulario.ivaManual).length ? (desgloseManual?.totalIva ?? 0) : round2(iva4 + iva10 + iva21);
   const totalFactura = round2(totalBase + totalIva);
   const idVisible = modoNuevo ? obtenerSiguienteId(registros) : (registros[indiceActual]?.id ?? 1);
   const snapshotActual = useMemo(
@@ -389,7 +396,7 @@ export function PantallaFacturasRecibidas({
     Boolean(formulario.numeroFactura.trim()) &&
     Boolean(formulario.tipo) &&
     Boolean(formulario.familia) &&
-    totalBase !== 0;
+    totalBase !== 0 && !errorIva;
 
   useEffect(() => {
     if (!resaltadoBusqueda.campo || resaltadoBusqueda.token === 0) {
@@ -474,10 +481,14 @@ export function PantallaFacturasRecibidas({
       return;
     }
 
-    setFormulario((prev) => ({
-      ...prev,
-      [campo]: normalizarImporte(value),
-    }));
+    const tipo = campo.slice(4) as "4"|"10"|"21";
+    const valor = normalizarImporte(value);
+    if (formulario.ivaManual?.[tipo] && parseDecimal(valor)!==parseDecimal(formulario[campo]) && !window.confirm("Esta base tiene una cuota de IVA corregida. ¿Cambiar la base y recalcular automáticamente su IVA? Cancelar conserva la base y la cuota anteriores.")) return;
+    setFormulario(prev => {
+      const manual = prev.ivaManual ? {...prev.ivaManual} : undefined;
+      if (manual && parseDecimal(valor)!==parseDecimal(prev[campo])) delete manual[tipo];
+      return {...prev,[campo]:valor,ivaManual:manual};
+    });
   }
 
   function cargarRegistroPorIndice(indice: number) {
@@ -858,7 +869,7 @@ export function PantallaFacturasRecibidas({
         parseDecimal(registro.base10) +
         parseDecimal(registro.base21)
     );
-    const totalIvaRegistro = round2(
+    const totalIvaRegistro = registro.ivaManual && Object.keys(registro.ivaManual).length ? cuotasFacturaRecibida({base0:parseDecimal(registro.base0),base4:parseDecimal(registro.base4),base10:parseDecimal(registro.base10),base21:parseDecimal(registro.base21)},registro.ivaManual).totalIva : round2(
       (parseDecimal(registro.base4) * 4) / 100 +
         (parseDecimal(registro.base10) * 10) / 100 +
         (parseDecimal(registro.base21) * 21) / 100
@@ -1165,6 +1176,7 @@ export function PantallaFacturasRecibidas({
           </Bloque>
 
           <Bloque titulo="Bases e importes">
+            <p className="text-sm">Las cuotas se calculan automáticamente. Puedes escribir la cuota del documento en cada tipo; borrar una corrección vuelve al cálculo automático.</p>
             <div className="grid gap-2 lg:grid-cols-4 2xl:gap-2.5">
               <Campo label="Base IVA 0%">
                 <input
@@ -1215,6 +1227,22 @@ export function PantallaFacturasRecibidas({
               </Campo>
             </div>
 
+            <div className="mt-2 grid gap-2 lg:grid-cols-3">
+              {tiposIvaRecibida.map(tipo => <Campo key={tipo} label={`Cuota IVA ${tipo}%`}>
+                <input aria-label={`Cuota IVA ${tipo}%`} type="text" inputMode="decimal" disabled={esGestoria}
+                  className={inputClassName}
+                  value={formulario.ivaManual?.[tipo]?.cuota ?? fmtMoney(round2(parseDecimal(formulario[`base${tipo}`])*Number(tipo)/100))}
+                  onChange={e=>{
+                    const valor=normalizarImporte(e.target.value);
+                    setFormulario(prev=>{const manual={...prev.ivaManual};
+                      if(valor==="") delete manual[tipo];
+                      else manual[tipo]={base:parseDecimal(prev[`base${tipo}`]),cuota:valor};
+                      return {...prev,ivaManual:manual};});
+                  }} />
+                {formulario.ivaManual?.[tipo] && <span className="text-sm">Cuota corregida según documento</span>}
+              </Campo>)}
+            </div>
+            {errorIva && <p role="alert">{errorIva}</p>}
             <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_1fr_1.08fr] 2xl:mt-2.5 2xl:gap-2.5 2xl:grid-cols-[1fr_1fr_1.1fr]">
               <div className="rounded-2xl border border-[#d2b391] bg-[linear-gradient(180deg,#f5ecdf_0%,#e8dac7_100%)] px-3.5 py-1.5 text-center shadow-[0_12px_22px_rgba(72,53,39,0.08)] 2xl:px-4 2xl:py-2">
                 <div className="text-center text-[11px] font-black uppercase tracking-[0.16em] text-[#8b6e52]">

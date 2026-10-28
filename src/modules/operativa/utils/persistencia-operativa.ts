@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClasificacionMapa } from "@/lib/clasificacion";
+import { cuotasFacturaRecibida, type IvaManualRecibida } from "@/modules/facturas-recibidas/iva-manual";
 import {
   crearAdjuntoPersistido,
   extraerMetaAdjunto,
@@ -27,6 +28,7 @@ type FormularioOperativa = {
   base4: string;
   base10: string;
   base21: string;
+  ivaManual?: IvaManualRecibida | null;
   pagado: boolean;
   fechaPago: string;
   formaPago: string;
@@ -145,6 +147,7 @@ function normalizarEntrada(registro: RegistroOperativaEntrada): RegistroOperativ
     base4: registro.base4 ?? "",
     base10: registro.base10 ?? "",
     base21: registro.base21 ?? "",
+    ivaManual: registro.ivaManual,
     pagado: registro.pagado ?? false,
     fechaPago: registro.fechaPago ?? "",
     formaPago: registro.formaPago ?? "",
@@ -364,7 +367,7 @@ function hidratarFacturaRecibida(
 ) {
   const base = resolverEtiquetasDesdeFila(row, maestros, clasificacion);
 
-  return buildRegistro({
+  const registro = buildRegistro({
     id: Number(row.id),
     ...base,
     fechaFactura: String(row.fecha_factura ?? ""),
@@ -373,12 +376,14 @@ function hidratarFacturaRecibida(
     base4: toFormDecimal(Number(row.base_4 ?? 0)),
     base10: toFormDecimal(Number(row.base_10 ?? 0)),
     base21: toFormDecimal(Number(row.base_21 ?? 0)),
+    ivaManual: row.iva_manual as IvaManualRecibida | null | undefined,
     pagado: Boolean(row.pagado),
     fechaPago: String(row.fecha_pago ?? ""),
     numeroPagare: String(row.numero_pagare ?? ""),
     observaciones: String(row.observaciones ?? ""),
     adjunto: hidratarAdjunto(row),
   });
+  return { ...registro, adjunto: hidratarAdjunto(row) };
 }
 
 function hidratarFacturaEmitida(
@@ -670,7 +675,7 @@ export async function guardarFacturaRecibidaPersistida(
   registro: RegistroOperativaEntrada,
   clasificacion: ClasificacionMapa
 ) {
-  const actual = normalizarEntrada(registro);
+  const actual = { ...normalizarEntrada(registro), adjunto: (registro.adjunto as ReturnType<typeof crearAdjuntoPersistido>) ?? null };
   const maestros = await cargarMaestrosPersistencia();
   const empresaId = resolverId(maestros.empresas, actual.empresa);
   const proveedorId = resolverId(maestros.proveedores, actual.proveedor);
@@ -681,9 +686,7 @@ export async function guardarFacturaRecibidaPersistida(
   const base4 = round2(parseDecimal(actual.base4));
   const base10 = round2(parseDecimal(actual.base10));
   const base21 = round2(parseDecimal(actual.base21));
-  const totalBase = round2(base0 + base4 + base10 + base21);
-  const totalIva = round2(base4 * 0.04 + base10 * 0.1 + base21 * 0.21);
-  const totalFactura = round2(totalBase + totalIva);
+  const {totalBase,totalIva,totalFactura} = cuotasFacturaRecibida({base0,base4,base10,base21},actual.ivaManual);
   const metaAdjunto = extraerMetaAdjunto(actual.adjunto);
 
   if (!empresaId || !proveedorId) {
@@ -708,6 +711,7 @@ export async function guardarFacturaRecibidaPersistida(
       total_base: totalBase,
       total_iva: totalIva,
       total_factura: totalFactura,
+      ...(actual.ivaManual !== undefined ? {iva_manual: actual.ivaManual} : {}),
       pagado: actual.pagado,
       fecha_pago: actual.fechaPago || null,
       forma_pago_id: formaPagoId,

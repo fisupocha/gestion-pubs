@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClasificacionMapa } from "@/lib/clasificacion";
+import { cuotasFacturaRecibida, type IvaManualRecibida } from "@/modules/facturas-recibidas/iva-manual";
 import type { MaestrosFormulario } from "@/modules/maestros/varios/data/obtener-maestros-formulario";
 import type { ConsultaState } from "@/modules/consultas/utils/estado-consultas";
 import {
@@ -31,6 +32,7 @@ export type RegistroBase = {
   base4: string;
   base10: string;
   base21: string;
+  ivaManual?: IvaManualRecibida | null;
 };
 
 export type FacturaDetalleLinea = {
@@ -254,9 +256,15 @@ function mkMovimiento(
       totales = caja(registro.base10);
       break;
     case "facturas-emitidas":
-    case "facturas-recibidas":
       totales = factura(registro.base0, registro.base4, registro.base10, registro.base21);
       break;
+    case "facturas-recibidas": {
+      if (registro.ivaManual && Object.keys(registro.ivaManual).length) {
+        const t = cuotasFacturaRecibida({base0:parseDecimal(registro.base0),base4:parseDecimal(registro.base4),base10:parseDecimal(registro.base10),base21:parseDecimal(registro.base21)},registro.ivaManual);
+        totales={sinIva:t.totalBase,iva:t.totalIva,conIva:t.totalFactura};
+      } else totales = factura(registro.base0,registro.base4,registro.base10,registro.base21);
+      break;
+    }
     case "alquileres":
       totales = alquiler(registro.base0, registro.base4, registro.base10, registro.base21);
       break;
