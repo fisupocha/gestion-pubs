@@ -22,5 +22,9 @@ export default async function MercaderiasPage() {
   let errorBajada = "";
   try { bajada = await leerBajadaPrivada(supabase); }
   catch { errorBajada = "No se ha podido leer la prueba privada de La Bajada. Los otros proveedores siguen disponibles."; }
-  return <PantallaMercaderias referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} bajada={bajada} errorBajada={errorBajada} />;
+  let rojas: Awaited<ReturnType<typeof leerBajadaPrivada>> = {referencias:[],compras:[]};
+  let errorRojas = "";
+  try { rojas = await leerBajadaPrivada(supabase,"rojas"); }
+  catch { errorRojas = "No se ha podido leer la prueba privada de Rojas Barrios. Los otros proveedores siguen disponibles."; }
+  return <PantallaMercaderias referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} bajada={bajada} errorBajada={errorBajada} rojas={rojas} errorRojas={errorRojas} />;
 }

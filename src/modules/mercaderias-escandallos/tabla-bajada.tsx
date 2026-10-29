@@ -5,17 +5,18 @@ import {COLUMNAS_BAJADA,ordenarBajada,resumirBajada,type CampoBajada,type DatosB
 const porcentaje=(n:number|null)=>n===null?"Pendiente":`${n.toLocaleString("es-ES",{maximumFractionDigits:2})}%`;
 const euros=(n:number|null)=>n===null?"—":`${n.toLocaleString("es-ES",{minimumFractionDigits:3,maximumFractionDigits:4})} €`;
 const celda="border-b border-[#e5d7c8] px-3 py-3 text-right tabular-nums whitespace-nowrap";
-export function TablaBajada({datos,filtros}:{datos:DatosBajada;filtros:FiltrosMercaderia}) {
+export function TablaBajada({datos,filtros,nombre="Distribuciones La Bajada",muestra="Muestra de enero de Tarantino.",porcentajeCalculado=false}:{datos:DatosBajada;filtros:FiltrosMercaderia;nombre?:string;muestra?:string;porcentajeCalculado?:boolean}) {
  const [orden,setOrden]=useState<{campo:CampoBajada;descendente:boolean}>({campo:"compradas",descendente:true});
  const [abierta,setAbierta]=useState<string|null>(null);
  const calculo=useMemo(()=>{try{return {filas:resumirBajada(datos,filtros),error:""};}catch(e){return {filas:[],error:e instanceof Error?e.message:"No se pudo calcular La Bajada."};}},[datos,filtros]);
  const filas=ordenarBajada(calculo.filas,orden.campo,orden.descendente);
  return <>
   <div role="status" className="mb-3 rounded-xl border border-[#c8ab77] bg-[#fff5df] p-3 text-sm text-[#503a20]">
-   <p className="font-bold">Distribuciones La Bajada · PRUEBA VISUAL · No contabilizada</p>
-   <p className="mt-1">Muestra de enero de Tarantino. Precio provisional: no incluye el descuento anual, todavía desconocido. El total mostrado recoge solo el descuento conocido.</p>
+   <p className="font-bold">{nombre} · PRUEBA VISUAL · No contabilizada</p>
+   <p className="mt-1">{muestra} Precio actual con IVA: ya incluye los descuentos conocidos y las cajas regaladas. Pendiente de incorporar el descuento anual cuando se conozca. El total mostrado recoge solo el descuento conocido.</p>
    <p className="mt-1">El descuento de la factura mensual ya está incluido en el coste; no se aplica dos veces. Las cajas sin cargo reducen el precio por unidad, sin aumentar el porcentaje pactado. Se respeta el IVA de cada producto.</p>
    <p className="mt-1">En los formatos sin unidades por caja documentadas, el precio individual queda pendiente.</p>
+   {porcentajeCalculado&&<p className="mt-1">La factura expresa el descuento en euros: el porcentaje mostrado se calcula sobre el precio de cada compra. El punto verde ya está incluido en el coste.</p>}
    {calculo.error&&<p role="alert">{calculo.error}</p>}
   </div>
   <div className="overflow-x-auto rounded-2xl border border-[#d8c4ae] bg-[#fffdf9]"><table className="w-full border-collapse text-sm text-[#36271d]">

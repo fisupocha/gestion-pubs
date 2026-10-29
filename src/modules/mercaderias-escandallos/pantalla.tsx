@@ -15,7 +15,7 @@ const euros = (valor: number) => valor.toLocaleString("es-ES", { style: "currenc
 const campo = "rounded-lg border border-[#cbb7a5] bg-white px-3 py-2 text-sm text-[#39291f]";
 const celda = "border-b border-[#e5d7c8] px-3 py-3 text-right tabular-nums whitespace-nowrap";
 
-export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, bajada, errorBajada }: { referenciasCoca: ReferenciaCoca[]; comprasCoca: CompraCoca[]; errorCoca: string; bajada: DatosBajada; errorBajada:string }) {
+export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, bajada, errorBajada, rojas, errorRojas }: { referenciasCoca: ReferenciaCoca[]; comprasCoca: CompraCoca[]; errorCoca: string; bajada: DatosBajada; errorBajada:string; rojas:DatosBajada; errorRojas:string }) {
   const acceso = useAccesoApp();
   const [lineas, setLineas] = useState<LineaMercaderia[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -45,9 +45,10 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
     catch (fallo) { return { filas: [], fallo: fallo instanceof Error ? fallo.message : "Revisa los datos." }; }
   }, [lineas, proveedor, local, desde, hasta, busqueda]);
   const locales = [...new Set([...lineas.map(l => l.local).filter((l): l is string => Boolean(l)), "Tarantino"])].sort();
-  const proveedores = [...new Set(lineas.map(l => l.proveedor))].filter(p => p !== "DISTRIBUIDORA BODEGA REYES MAGOS, S.L." && !p.toLocaleUpperCase("es").includes("LA BAJADA")).sort();
+  const proveedores = [...new Set(lineas.map(l => l.proveedor))].filter(p => p !== "DISTRIBUIDORA BODEGA REYES MAGOS, S.L." && !p.toLocaleUpperCase("es").includes("LA BAJADA") && !p.toLocaleUpperCase("es").includes("ROJAS BARRIOS")).sort();
   const esCoca = proveedor === "cocacola-prueba";
   const esBajada = proveedor === "bajada-prueba";
+  const esRojas = proveedor === "rojas-prueba";
   const enPeriodo = lineas.filter(l => l.proveedor === proveedor && l.fecha >= desde && l.fecha <= hasta && (!local || l.local === local));
   const pendientes = enPeriodo.filter(l => l.estado_validacion !== "validada").length;
   const sinLocal = enPeriodo.filter(l => !l.local).length;
@@ -79,21 +80,23 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
         <option value="DISTRIBUIDORA BODEGA REYES MAGOS, S.L.">Reyes Magos</option>
         <option value="cocacola-prueba">Coca-Cola</option>
         <option value="bajada-prueba">Distribuciones La Bajada</option>
+        <option value="rojas-prueba">Rojas Barrios</option>
         {proveedores.map(p => <option key={p} value={p}>{p}</option>)}
       </select></label>
-      <label className="grid min-w-40 max-w-72 flex-1 gap-1 text-xs font-semibold">Buscar producto<input className={`${campo} w-full`} type="search" placeholder={esCoca ? "Por ejemplo, Coca-Cola" : esBajada ? "Por ejemplo, Mahou" : "Por ejemplo, whisky J-B"} value={busqueda} onChange={e => setBusqueda(e.target.value)} /></label>
+      <label className="grid min-w-40 max-w-72 flex-1 gap-1 text-xs font-semibold">Buscar producto<input className={`${campo} w-full`} type="search" placeholder={esCoca ? "Por ejemplo, Coca-Cola" : esBajada ? "Por ejemplo, Mahou" : esRojas ? "Por ejemplo, Vichy" : "Por ejemplo, whisky J-B"} value={busqueda} onChange={e => setBusqueda(e.target.value)} /></label>
     </div>
 
     {esCoca && (errorCoca ? <p role="alert">{errorCoca}</p> : <TablaCocaCola filtros={{local,desde,hasta,busqueda}} referencias={referenciasCoca} compras={comprasCoca} />)}
     {esBajada && (errorBajada ? <p role="alert">{errorBajada}</p> : <TablaBajada filtros={{local,desde,hasta,busqueda}} datos={bajada} />)}
-    {!esCoca && !esBajada && <div role="status" aria-live="polite" className="mb-3 text-sm text-[#6c4c38]">
+    {esRojas && (errorRojas ? <p role="alert">{errorRojas}</p> : <TablaBajada key="rojas" filtros={{local,desde,hasta,busqueda}} datos={rojas} nombre="Rojas Barrios" muestra="Muestra de febrero de Tarantino." porcentajeCalculado />)}
+    {!esCoca && !esBajada && !esRojas && <div role="status" aria-live="polite" className="mb-3 text-sm text-[#6c4c38]">
       {cargando ? "Cargando todas las compras…" : aviso ? aviso : lineas.length === 0 ? "Todavía no hay compras cargadas. El listado de Reyes Magos enero–agosto está pendiente de extracción y validación." :
         `${filas.length} referencias · ${euros(importe)} · Orden: ${etiquetaOrden}, ${orden.campo === "producto" ? (orden.descendente ? "Z–A" : "A–Z") : (orden.descendente ? "mayor a menor" : "menor a mayor")}.`}
       {!cargando && !aviso && pendientes > 0 && <p className="mt-2 font-bold">Acumulado provisional: {pendientes} líneas pendientes de revisión, excluidas del cálculo.</p>}
       {!cargando && !aviso && sinLocal > 0 && <p className="mt-1">{sinLocal} líneas sin local identificado: incluidas únicamente en Riverocio completo.</p>}
     </div>}
 
-    {!esCoca && !esBajada && !cargando && <div className="overflow-x-auto rounded-2xl border border-[#d8c4ae] bg-[#fffdf9]">
+    {!esCoca && !esBajada && !esRojas && !cargando && <div className="overflow-x-auto rounded-2xl border border-[#d8c4ae] bg-[#fffdf9]">
       <table className="w-full border-collapse text-sm text-[#36271d]">
         <caption className="p-3 text-left text-xs text-[#806448]">Precio medio comprado = importe con IVA ÷ compradas. Coste real = importe con IVA ÷ (compradas + regaladas).</caption>
         <thead className="bg-[#eadbc6] text-[#483420]"><tr>

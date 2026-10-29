@@ -30,3 +30,12 @@ test("rechaza duplicados, negativos e intervalos incorrectos",()=>{
  assert.throws(()=>validarDatosBajada({...datos,compras:[{...datos.compras[0],regaladas:-1}]}));
  assert.throws(()=>resumirBajada(datos,{...filtros,desde:"2027-01-01"}));
 });
+
+test("precio actual visible sin anual: cajas de 28, cambio de tarifa y punto verde incluido",()=>{
+ const r={...datos.referencias[0],unidadesCaja:28,iva:10};
+ const a={...datos.compras[0],cajas:1,brutoCentimos:3000,netoCentimos:2420,descuentoFactura:20};
+ const b={...a,id:"nueva-tarifa",brutoCentimos:4000,netoCentimos:3220};
+ const [resultado]=resumirBajada({referencias:[r],compras:[a,b]},filtros);
+ assert.equal(resultado.anual,null);assert.equal(resultado.mensual,20);assert.equal(resultado.total,20);
+ assert.ok(Math.abs(resultado.precio!-(24.20+32.20)*1.10/56)<1e-12);
+});
