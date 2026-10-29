@@ -9,7 +9,9 @@ export function catalogoVenta(origenes:{producto:string;formato:string;proveedor
     if(existente) { if(!existente.proveedores.includes(origen.proveedor)) existente.proveedores.push(origen.proveedor); continue; }
     const nombre=normalizarReferencia(origen.producto).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
     let grupo="Pendiente de clasificar", formatos=["Pendiente de definir"];
-    if(/CHAMP|MOET|CAVA|CODORN/.test(nombre)) {grupo="Champán y espumosos";formatos=["Botella completa"];}
+    if(/^GINEBRA TANQUERAY 0[.,]0$/.test(nombre)) {grupo="Sin alcohol";formatos=["Copa · 7 cl + refresco"];}
+    else if(nombre==="TANQUERAY RANGPUR") {grupo="Alcohol";formatos=["Copa · 7 cl + refresco"];}
+    else if(/CHAMP|MOET|CAVA|CODORN/.test(nombre)) {grupo="Champán y espumosos";formatos=["Botella completa"];}
     else if(/WHISK|RON\b|GINEBRA|GIN\b|VODKA|TEQUILA|LICOR|CREMA|JAGER|JACK DANIEL|BAILEYS|PACHARAN|BRANDY|AMARE|FERNET|PONCHE|MALIBU|APEROL|MARTINI|PATRON/.test(nombre) && !/SIN ALCOHOL|0[.,]0/.test(nombre)) {grupo="Alcohol";formatos=["Copa · 7 cl + refresco","Chupito · 5 cl","Botella completa"];}
     else if(/AGUA|SOLAN|VICHY/.test(nombre)) {grupo="Agua";formatos=["Unidad"];}
     else if(/MAHOU|ALHAMBRA|CORONITA|CERVEZA|MIXTA/.test(nombre)) {grupo="Cerveza";formatos=["Unidad"];}
