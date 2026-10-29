@@ -26,3 +26,5 @@ export const itemsGestionDiaria = [
 ];
 
 export const itemConsultas = { href: "/consultas", label: "Consultas" };
+
+export const itemMercaderias = { href: "/mercaderias-escandallos", label: "Mercaderías y escandallos" };

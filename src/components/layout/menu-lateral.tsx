@@ -10,6 +10,7 @@ import { marcaCargaVisible } from "@/components/layout/estado-navegacion";
 import { esRutaPermitidaGestoria } from "@/modules/auth/permisos-acceso";
 import {
   itemConsultas,
+  itemMercaderias,
   itemsGestionDiaria,
   itemsMaestros,
   itemsOperativa,
@@ -184,15 +185,15 @@ export function MenuLateral() {
   return (
     <aside className="w-full md:h-full md:min-h-0 md:w-[256px] md:flex-none">
       <div className="flex h-full min-h-0 flex-col rounded-[24px] border border-[#584334] bg-[linear-gradient(180deg,#30241d_0%,#231914_48%,#1a1310_100%)] px-2.5 py-1.5 shadow-[0_28px_58px_rgba(24,16,12,0.24)] backdrop-blur">
-        <nav className="flex flex-1 min-h-0 flex-col">
-          <div className="flex-1 min-h-0">
+        <nav className="flex flex-1 min-h-0 flex-col overflow-y-auto">
+          <div className="shrink-0">
             <MenuBox
               titulo="Operativa"
               items={itemsOperativaVisibles}
               pathname={pathname}
-              className="flex h-full flex-col"
-              itemsClassName="grid h-full gap-0.5"
-              itemClassName=""
+              className="flex flex-col"
+              itemsClassName="grid gap-0.5"
+              itemClassName="min-h-[32px]"
             />
           </div>
 
@@ -214,6 +215,10 @@ export function MenuLateral() {
                 itemClassName="min-h-[40px]"
               />
             ) : null}
+            {acceso.esAdmin ? (
+              <MenuLink href={itemMercaderias.href} label={itemMercaderias.label} activo={pathname === itemMercaderias.href} className="min-h-[44px] border border-[#5e4638] text-center" />
+            ) : null}
+
 
             {acceso.esAdmin ? (
               <Link
