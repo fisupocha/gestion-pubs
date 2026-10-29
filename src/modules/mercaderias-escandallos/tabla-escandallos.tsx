@@ -1,4 +1,5 @@
 "use client";
+import { fechaNegocio } from "./fecha-negocio";
 import { useMemo,useState } from "react";
 import { catalogoVenta,origenesValidados } from "./catalogo-venta";
 import type { LineaMercaderia } from "./modelo";
@@ -7,7 +8,7 @@ import type { DatosBajada } from "./bajada";
 import { calcularServicio,capacidadDocumentada,claveProducto,conectarCompras,costePeriodo,validarConfiguracion,type ConfiguracionEscandallo } from "./escandallo";
 
 export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,configurada,errores,cargando}:{lineas:LineaMercaderia[];coca:ReferenciaCoca[];comprasCoca:CompraCoca[];bajada:DatosBajada;rojas:DatosBajada;config:ConfiguracionEscandallo;configurada:boolean;errores:string[];cargando:boolean}) {
-  const [anio,setAnio]=useState(String(new Date().getFullYear()));
+  const [anio,setAnio]=useState(fechaNegocio().slice(0,4));
   const [buscar,setBuscar]=useState("");
   const campo="rounded-lg border border-[#cbb7a5] bg-white px-3 py-2 text-sm text-[#39291f]";
   const calculo=useMemo(()=>{
@@ -27,7 +28,7 @@ export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,co
           const precios=config.precios.filter(v=>v.clave===clave&&v.formato===formato&&v.desde<=hasta&&v.hasta>=desde);
           const preciosUnicos=[...new Set(precios.map(v=>v.centimos))];
           // Precio vigente para comparar con coste anual revisado, sin reescribir ventas pasadas.
-          const fecha=anio===String(new Date().getFullYear())?new Date().toISOString().slice(0,10):hasta;
+          const fecha=anio===fechaNegocio().slice(0,4)?fechaNegocio():hasta;
           const precio=config.precios.find(v=>v.clave===clave&&v.formato===formato&&v.desde<=fecha&&v.hasta>=fecha);
           const resultado=calcularServicio(costes,formato,receta,mezclador,precio?precio.centimos/100:null);
           const incidencias=[...costes.incidencias,...(mezclador?.incidencias??[])];

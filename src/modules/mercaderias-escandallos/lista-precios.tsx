@@ -1,4 +1,5 @@
 "use client";
+import { fechaNegocio } from "./fecha-negocio";
 import { useMemo, useState } from "react";
 import type { LineaMercaderia } from "./modelo";
 import type { ReferenciaCoca } from "./cocacola";
@@ -12,10 +13,12 @@ export function ListaPrecios({lineas,coca,bajada,rojas,cargando,errores,config}:
   const productos=useMemo(()=>catalogoVenta([...origenesValidados(lineas),...coca.map(r=>({...r,proveedor:"Coca-Cola"})),...bajada.map(r=>({...r,proveedor:"Distribuciones La Bajada"})),...rojas.map(r=>({...r,proveedor:"Rojas Barrios"}))]),[lineas,coca,bajada,rojas]);
   const seleccion=productos.filter(r=>(!grupo||r.grupo===grupo)&&`${r.producto} ${r.formato} ${r.proveedores.join(" ")}`.toLocaleLowerCase("es").includes(buscar.trim().toLocaleLowerCase("es")));
   const precioVenta=(producto:string,formatoOrigen:string,formatoVenta:string)=>{
-    const fecha=new Date().toISOString().slice(0,10);
+    const fecha=fechaNegocio();
     const p=config.precios.find(p=>p.clave===claveProducto(producto,formatoOrigen)&&p.formato===formatoVenta&&p.desde<=fecha&&p.hasta>=fecha);
     return p?(p.centimos/100).toLocaleString("es-ES",{style:"currency",currency:"EUR"}):"Pendiente";
   };
+  const totalFormatos=seleccion.reduce((s,r)=>s+r.formatos.length,0);
+  const preciosAsignados=seleccion.reduce((s,r)=>s+r.formatos.filter(f=>precioVenta(r.producto,r.formato,f)!=="Pendiente").length,0);
   const campo="rounded-lg border border-[#cbb7a5] bg-white px-3 py-2 text-sm text-[#39291f]";
   return <div className="text-[#36271d]">
     <h2 className="text-xl font-bold">Lista de precios</h2>
@@ -26,7 +29,7 @@ export function ListaPrecios({lineas,coca,bajada,rojas,cargando,errores,config}:
       <label className="grid gap-1 text-sm">Buscar referencia<input type="search" className={campo} value={buscar} onChange={e=>setBuscar(e.target.value)} /></label>
       <label className="grid gap-1 text-sm">Grupo<select className={campo} value={grupo} onChange={e=>setGrupo(e.target.value)}><option value="">Todos los grupos</option>{[...new Set(productos.map(r=>r.grupo))].sort().map(g=><option key={g}>{g}</option>)}</select></label>
     </div>
-    <p role="status" className="mb-3 text-sm">{cargando?"Cargando referencias…":`${seleccion.length} referencias · ${seleccion.reduce((s,r)=>s+r.formatos.length,0)} formatos de venta · Precios pendientes`}</p>
+    <p role="status" className="mb-3 text-sm">{cargando?"Cargando referencias…":`${seleccion.length} referencias · ${totalFormatos} formatos de venta · ${preciosAsignados} precios asignados · ${totalFormatos-preciosAsignados} pendientes`}</p>
     <div className="overflow-x-auto rounded-xl border border-[#d8c4ae] bg-[#fffdf9]"><table className="w-full text-left text-sm text-[#36271d]">
       <thead className="bg-[#eadbc6]"><tr>{["Producto","Formato de origen","Proveedor","Grupo propuesto","Formato de venta","Precio de venta con IVA"].map(t=><th scope="col" key={t} className="px-3 py-3">{t}</th>)}</tr></thead>
       <tbody>{seleccion.flatMap(r=>r.formatos.map(formato=><tr key={JSON.stringify([r.producto,r.formato,formato])} className="border-t border-[#e5d7c8] hover:bg-[#fcf3e6]"><th scope="row" className="px-3 py-3 font-semibold">{r.producto}</th><td className="px-3 py-3">{r.formato}</td><td className="px-3 py-3">{r.proveedores.join(" · ")}</td><td className="px-3 py-3">{r.grupo}</td><td className="px-3 py-3">{formato}</td><td className="px-3 py-3 font-semibold text-[#725c49]">{precioVenta(r.producto,r.formato,formato)}</td></tr>))}
