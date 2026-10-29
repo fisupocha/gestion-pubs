@@ -36,6 +36,7 @@ export const ESTADOS_MES_TPV = [
 
 export type EstadoMesTpv = (typeof ESTADOS_MES_TPV)[number];
 
+/** Comprobar solo se conserva para leer datos antiguos; no es una opción operativa. */
 export type EstadoOk = "pendiente" | "comprobar" | "ok";
 
 export type OrdenOk = "original" | "pendientes";
@@ -170,7 +171,7 @@ export function ordenarMovimientos<T extends { id: string; ok: EstadoOk; orden: 
     return secuencia;
   }
 
-  const peso = (ok: EstadoOk) => (ok === "pendiente" ? 0 : ok === "comprobar" ? 1 : 2);
+  const peso = (ok: EstadoOk) => (ok === "ok" ? 1 : 0);
 
   return secuencia.sort((a, b) => peso(a.ok) - peso(b.ok) || compararSecuenciaBancaria(a, b));
 }

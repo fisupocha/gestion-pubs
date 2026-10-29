@@ -12,10 +12,6 @@ export function normalizarEstadoOk(valor: string): EstadoOk {
     return "ok";
   }
 
-  if (valor === "comprobar") {
-    return "comprobar";
-  }
-
   return "pendiente";
 }
 
@@ -31,7 +27,7 @@ export function requiereConfirmacionManual(
     return false;
   }
 
-  return movimiento.ok === "comprobar" && incidenciaAbiertaDe(movimiento) !== null;
+  return incidenciaAbiertaDe(movimiento) !== null;
 }
 
 export function textoConfirmacionManual(estadoNuevo: EstadoOk) {
@@ -59,7 +55,7 @@ export function confirmarCorreccionManual<T extends MovimientoInterno>(movimient
 
 /**
  * La revisión conjunta futura llama aquí solo con una incidencia ya autorizada.
- * La misma firma resuelta no vuelve a poner el movimiento en Comprobar.
+ * La misma firma resuelta no vuelve a poner el movimiento en Pendiente.
  * Una firma distinta es información nueva y sí puede señalarlo otra vez.
  * No crea movimientos ni reglas.
  */
@@ -73,7 +69,7 @@ export function señalarIncidenciaPrograma<T extends MovimientoInterno>(movimien
 
   return {
     ...movimiento,
-    ok: "comprobar",
+    ok: "pendiente",
     decisionManual: false,
     incidenciaAbierta: incidencia,
   };

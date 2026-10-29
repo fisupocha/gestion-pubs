@@ -6,7 +6,7 @@ import { botonPrimario, botonSecundario } from "./clases";
 
 const NOMBRE: Record<EstadoOk, string> = {
   pendiente: "Pendiente",
-  comprobar: "Comprobar",
+  comprobar: "Pendiente",
   ok: "OK",
 };
 

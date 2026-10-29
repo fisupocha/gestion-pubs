@@ -74,7 +74,7 @@ export function argumentosConsulta(opciones: {
 
 export function textoConsultable(fila: ConsultaMovimiento) {
   const estado =
-    fila.estado === "pendiente" ? "Pendiente" : fila.estado === "comprobar" ? "Comprobar" : fila.estado === "ok" ? "OK" : fila.estado;
+    fila.estado === "pendiente" ? "Pendiente" : fila.estado === "comprobar" ? "Pendiente" : fila.estado === "ok" ? "OK" : fila.estado;
   const clase =
     fila.clase === "tpv-ingreso"
       ? "ingreso"

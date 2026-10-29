@@ -60,7 +60,7 @@ test("pendientes arriba agrupa rojo, amarillo y verde y vuelve al orden original
   const pendientes = ordenarMovimientos(movimientos, "pendientes").map((movimiento) => movimiento.id);
   const otraVez = ordenarMovimientos(movimientos, "original").map((movimiento) => movimiento.id);
 
-  assert.deepEqual(pendientes, ["d", "a", "c", "b"]);
+  assert.deepEqual(pendientes, ["d", "c", "a", "b"]);
   assert.deepEqual(otraVez, ["d", "c", "b", "a"]);
 });
 
@@ -121,7 +121,7 @@ test("una firma nueva puede volver a señalar Comprobar e indica el dato nuevo",
     firma: "v2",
   });
 
-  assert.equal(nuevo.ok, "comprobar");
+  assert.equal(nuevo.ok, "pendiente");
   assert.equal(nuevo.incidenciaAbierta?.motivo, "Ha aparecido otra factura con el mismo importe.");
   assert.equal(nuevo.incidenciaAbierta?.firma, "v2");
   assert.equal(nuevo.incidenciasResueltas?.length, 1);
@@ -142,4 +142,14 @@ test("un estado antiguo Comprobado se lee como OK y no pierde la observación", 
   assert.equal(guardado.importe, 1);
   assert.equal(guardado.fecha, "2026-10-02");
   assert.deepEqual(guardado.incidenciasResueltas, []);
+});
+
+test("Comprobar antiguo se normaliza a Pendiente conservando la incidencia", () => {
+ const anterior = fila({id:"legado", orden:9, fecha:"2026-10-29", ok:"comprobar", incidenciaAbierta:{id:"i", firma:"1", motivo:"Revisar"}});
+ const actual = normalizarMovimientoGuardado(anterior);
+ assert.equal(normalizarEstadoOk("comprobar"), "pendiente");
+ assert.equal(actual.ok, "pendiente");
+ assert.equal(actual.observaciones, anterior.observaciones);
+ assert.deepEqual(actual.incidenciaAbierta, anterior.incidenciaAbierta);
+ assert.equal(requiereConfirmacionManual(actual, "ok"), true);
 });

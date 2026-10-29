@@ -29,7 +29,7 @@ type TablaMovimientosProps = {
 
 const COLOR_ESTADO: Record<EstadoOk, string> = {
   pendiente: "border-[#e3b2aa] bg-[#f6d9d4] text-[#7a3028]",
-  comprobar: "border-[#e4d39a] bg-[#f8e8bc] text-[#6a5010]",
+  comprobar: "border-[#e3b2aa] bg-[#f6d9d4] text-[#7a3028]",
   ok: "border-[#b7d7b4] bg-[#d9efd6] text-[#1f5c32]",
 };
 
@@ -248,13 +248,12 @@ export function TablaMovimientos({
                   </td>
                   <td className={`border px-1.5 py-0.5 align-top ${COLOR_ESTADO[movimiento.ok]}`}>
                     <select
-                      value={movimiento.ok}
+                      value={movimiento.ok === "ok" ? "ok" : "pendiente"}
                       aria-label={`Estado de ${referencia}`}
                       onChange={(event) => onCambio(movimiento.id, "ok", event.target.value)}
                       className={`w-full rounded-[6px] border px-1 py-0.5 text-sm font-semibold leading-5 outline-none ${COLOR_ESTADO[movimiento.ok]}`}
                     >
                       <option value="pendiente">Pendiente</option>
-                      <option value="comprobar">Comprobar</option>
                       <option value="ok">OK</option>
                     </select>
                   </td>
