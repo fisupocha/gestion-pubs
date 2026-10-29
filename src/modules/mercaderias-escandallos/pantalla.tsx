@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ListaPrecios } from "./lista-precios";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { supabase } from "@/lib/supabase";
@@ -17,6 +20,7 @@ const celda = "border-b border-[#e5d7c8] px-3 py-3 text-right tabular-nums white
 
 export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, bajada, errorBajada, rojas, errorRojas }: { referenciasCoca: ReferenciaCoca[]; comprasCoca: CompraCoca[]; errorCoca: string; bajada: DatosBajada; errorBajada:string; rojas:DatosBajada; errorRojas:string }) {
   const acceso = useAccesoApp();
+  const esListaPrecios = usePathname().endsWith("/lista-precios");
   const [lineas, setLineas] = useState<LineaMercaderia[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -69,6 +73,11 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
       <button type="button" disabled={cargando} className={campo} onClick={() => { setCargando(true); setRecarga(n => n + 1); }}>Actualizar</button>
     </header>
 
+    <nav aria-label="Apartados de mercaderías" className="mb-5 flex flex-wrap gap-3">
+      <Link href="/mercaderias-escandallos" aria-current={!esListaPrecios ? "page" : undefined} className={`${campo} ${!esListaPrecios ? "font-bold ring-2 ring-[#806448]" : ""}`}>Compras por producto</Link>
+      <Link href="/mercaderias-escandallos/lista-precios" aria-current={esListaPrecios ? "page" : undefined} className={`${campo} ${esListaPrecios ? "font-bold ring-2 ring-[#806448]" : ""}`}>Lista de precios</Link>
+    </nav>
+    {esListaPrecios ? <ListaPrecios lineas={lineas} coca={referenciasCoca} bajada={bajada.referencias} rojas={rojas.referencias} cargando={cargando} errores={[error,errorCoca,errorBajada,errorRojas].filter(Boolean)} /> : <>
     <div className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-[#fffaf3] p-4 text-[#604732] shadow-sm">
       <label className="grid gap-1 text-xs font-semibold">Local<select className={campo} value={local} onChange={e => setLocal(e.target.value)}>
         <option value="">Riverocio — Todos los locales</option>
@@ -126,5 +135,6 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
         </tbody>
       </table>
     </div>}
+    </>}
   </section>;
 }
