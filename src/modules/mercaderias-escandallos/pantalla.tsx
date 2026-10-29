@@ -48,7 +48,7 @@ export function PantallaMercaderias() {
   if (!acceso.listo) return <p className="p-6">Comprobando el acceso…</p>;
   if (!acceso.esAdmin) return <p className="p-6">Tu sesión no permite consultar este módulo.</p>;
 
-  return <section className="flex h-full min-h-0 flex-col overflow-y-auto p-4 md:p-6">
+  return <section className="flex h-full min-h-0 flex-col overflow-y-auto p-4 text-[#36271d] md:p-6">
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div><p className="text-xs font-bold uppercase tracking-widest text-[#806448]">Riverocio · Compras conjuntas</p>
         <h1 className="mt-1 text-2xl font-black text-[#36271d]">Mercaderías y escandallos</h1>
@@ -75,7 +75,7 @@ export function PantallaMercaderias() {
     </div>
 
     {!cargando && <div className="overflow-x-auto rounded-2xl border border-[#d8c4ae] bg-[#fffdf9]">
-      <table className="w-full border-collapse text-sm">
+      <table className="w-full border-collapse text-sm text-[#36271d]">
         <caption className="p-3 text-left text-xs text-[#806448]">Precio medio comprado = importe con IVA ÷ compradas. Coste real = importe con IVA ÷ (compradas + regaladas).</caption>
         <thead className="bg-[#eadbc6] text-[#483420]"><tr>
           <th className="px-3 py-3 text-left">Producto / formato</th>
