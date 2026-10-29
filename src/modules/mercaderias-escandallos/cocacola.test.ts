@@ -41,3 +41,30 @@ test("orden numérico, pendientes al final en ambos sentidos e IDs idempotentes"
 test("cantidades inválidas fallan sin totales parciales",()=>{
  assert.throws(()=>calcularCoca(coca,[{...COMPRAS_COCA_PRUEBA[0],cajas:-1}]),/no válida/);
 });
+
+test("regalos reducen precio entre todas las recibidas sin aumentar descuentos ni coste",()=>{
+ const l={...COMPRAS_COCA_PRUEBA[0],cajas:10};
+ const sin=calcularCoca(coca,[l]);
+ const con=calcularCoca(coca,[{...l,cajasRegaladas:2}]);
+ assert.equal(con.cajas,10);assert.equal(con.regaladas,2);assert.equal(con.recibidas,12);
+ assert.equal(con.total,sin.total);
+ assert.ok(Math.abs(con.precio!-sin.precio!*10/12)<1e-12);
+ assert.equal(calcularCoca(coca,[COMPRAS_COCA_PRUEBA[0]]).regaladas,0);
+});
+
+test("regalo de otra referencia no se suma al producto comprado y admite línea sin cargo",()=>{
+ const regalo:CompraCoca={...COMPRAS_COCA_PRUEBA[0],id:"regalo-otra",codigo:"4",cajas:0,cajasRegaladas:2,brutoCentimos:0,netoCentimos:0};
+ const r=resumirCoca([COMPRAS_COCA_PRUEBA[0],regalo],filtros,REFERENCIAS_COCA);
+ assert.equal(r[0].regaladas,0);
+ assert.equal(r[4].cajas,0);assert.equal(r[4].regaladas,2);assert.equal(r[4].precio,0);
+ assert.throws(()=>calcularCoca(coca,[{...regalo,codigo:"0",netoCentimos:10}]),/no válida/);
+});
+
+test("nuevas columnas ordenan numéricamente y rechazan regalos inválidos",()=>{
+ const r=resumirCoca(COMPRAS_COCA_PRUEBA.map((l,i)=>({...l,cajasRegaladas:i})),filtros,REFERENCIAS_COCA);
+ assert.equal(ordenarCoca(r,"regaladas",true)[0].regaladas,4);
+ assert.equal(ordenarCoca(r,"recibidas",false)[0].recibidas,5);
+ for(const cajasRegaladas of [-1,.5,NaN,Number.MAX_SAFE_INTEGER]) {
+  assert.throws(()=>calcularCoca(coca,[{...COMPRAS_COCA_PRUEBA[0],cajasRegaladas}]));
+ }
+});
