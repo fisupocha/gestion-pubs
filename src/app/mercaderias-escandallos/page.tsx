@@ -1,3 +1,5 @@
+import { leerEscandalloPrivado } from "@/modules/mercaderias-escandallos/escandallo-privado";
+import { configuracionVacia } from "@/modules/mercaderias-escandallos/escandallo";
 import { PantallaMercaderias } from "@/modules/mercaderias-escandallos/pantalla";
 import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 import { redirect } from "next/navigation";
@@ -26,5 +28,8 @@ export default async function MercaderiasPage() {
   let errorRojas = "";
   try { rojas = await leerBajadaPrivada(supabase,"rojas"); }
   catch { errorRojas = "No se ha podido leer la prueba privada de Rojas Barrios. Los otros proveedores siguen disponibles."; }
-  return <PantallaMercaderias referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} bajada={bajada} errorBajada={errorBajada} rojas={rojas} errorRojas={errorRojas} />;
+  let escandallo={datos:configuracionVacia,configurada:false},errorEscandallo="";
+  try { escandallo=await leerEscandalloPrivado(supabase); }
+  catch(e) { errorEscandallo=e instanceof Error?e.message:"No se pudieron leer los escandallos."; }
+  return <PantallaMercaderias configEscandallo={escandallo.datos} escandalloConfigurado={escandallo.configurada} errorEscandallo={errorEscandallo} referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} bajada={bajada} errorBajada={errorBajada} rojas={rojas} errorRojas={errorRojas} />;
 }

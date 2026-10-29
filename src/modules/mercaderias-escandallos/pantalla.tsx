@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { TablaEscandallos } from "./tabla-escandallos";
+import type { ConfiguracionEscandallo } from "./escandallo";
+import { usePathname, useRouter } from "next/navigation";
 import { ListaPrecios } from "./lista-precios";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAccesoApp } from "@/components/acceso/control-acceso-app";
@@ -18,8 +20,10 @@ const euros = (valor: number) => valor.toLocaleString("es-ES", { style: "currenc
 const campo = "rounded-lg border border-[#cbb7a5] bg-white px-3 py-2 text-sm text-[#39291f]";
 const celda = "border-b border-[#e5d7c8] px-3 py-3 text-right tabular-nums whitespace-nowrap";
 
-export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, bajada, errorBajada, rojas, errorRojas }: { referenciasCoca: ReferenciaCoca[]; comprasCoca: CompraCoca[]; errorCoca: string; bajada: DatosBajada; errorBajada:string; rojas:DatosBajada; errorRojas:string }) {
+export function PantallaMercaderias({ configEscandallo, escandalloConfigurado, errorEscandallo, referenciasCoca, comprasCoca, errorCoca, bajada, errorBajada, rojas, errorRojas }: { configEscandallo:ConfiguracionEscandallo; escandalloConfigurado:boolean; errorEscandallo:string; referenciasCoca: ReferenciaCoca[]; comprasCoca: CompraCoca[]; errorCoca: string; bajada: DatosBajada; errorBajada:string; rojas:DatosBajada; errorRojas:string }) {
   const acceso = useAccesoApp();
+  const router = useRouter();
+  const esEscandallo = usePathname().endsWith("/escandallos");
   const esListaPrecios = usePathname().endsWith("/lista-precios");
   const [lineas, setLineas] = useState<LineaMercaderia[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -70,14 +74,15 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
         <h1 className="mt-1 text-2xl font-black text-[#36271d]">Mercaderías y escandallos</h1>
         <p className="mt-2 text-sm text-[#725c49]">Compras acumuladas por producto y formato. Todos los precios incluyen IVA.</p>
       </div>
-      <button type="button" disabled={cargando} className={campo} onClick={() => { setCargando(true); setRecarga(n => n + 1); }}>Actualizar</button>
+      <button type="button" disabled={cargando} className={campo} onClick={() => { setCargando(true); setRecarga(n => n + 1); router.refresh(); }}>Actualizar</button>
     </header>
 
     <nav aria-label="Apartados de mercaderías" className="mb-5 flex flex-wrap gap-3">
-      <Link href="/mercaderias-escandallos" aria-current={!esListaPrecios ? "page" : undefined} className={`${campo} ${!esListaPrecios ? "font-bold ring-2 ring-[#806448]" : ""}`}>Compras por producto</Link>
+      <Link href="/mercaderias-escandallos" aria-current={!esListaPrecios && !esEscandallo ? "page" : undefined} className={`${campo} ${!esListaPrecios && !esEscandallo ? "font-bold ring-2 ring-[#806448]" : ""}`}>Compras por producto</Link>
       <Link href="/mercaderias-escandallos/lista-precios" aria-current={esListaPrecios ? "page" : undefined} className={`${campo} ${esListaPrecios ? "font-bold ring-2 ring-[#806448]" : ""}`}>Lista de precios</Link>
+      <Link href="/mercaderias-escandallos/escandallos" aria-current={esEscandallo ? "page" : undefined} className={`${campo} ${esEscandallo ? "font-bold ring-2 ring-[#806448]" : ""}`}>Escandallos y precio de venta</Link>
     </nav>
-    {esListaPrecios ? <ListaPrecios lineas={lineas} coca={referenciasCoca} bajada={bajada.referencias} rojas={rojas.referencias} cargando={cargando} errores={[error,errorCoca,errorBajada,errorRojas].filter(Boolean)} /> : <>
+    {esEscandallo ? <TablaEscandallos lineas={lineas} coca={referenciasCoca} comprasCoca={comprasCoca} bajada={bajada} rojas={rojas} config={configEscandallo} configurada={escandalloConfigurado} errores={[error,errorCoca,errorBajada,errorRojas,errorEscandallo].filter(Boolean)} cargando={cargando}/> : esListaPrecios ? <ListaPrecios config={configEscandallo} lineas={lineas} coca={referenciasCoca} bajada={bajada.referencias} rojas={rojas.referencias} cargando={cargando} errores={[error,errorCoca,errorBajada,errorRojas,errorEscandallo].filter(Boolean)} /> : <>
     <div className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-[#fffaf3] p-4 text-[#604732] shadow-sm">
       <label className="grid gap-1 text-xs font-semibold">Local<select className={campo} value={local} onChange={e => setLocal(e.target.value)}>
         <option value="">Riverocio — Todos los locales</option>
