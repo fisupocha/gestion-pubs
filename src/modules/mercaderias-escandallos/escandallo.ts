@@ -3,6 +3,12 @@ import { calcularCoca, type CompraCoca, type ReferenciaCoca } from "./cocacola";
 import { resumirBajada, type DatosBajada } from "./bajada";
 
 export const claveProducto = (producto:string, formato:string) => JSON.stringify([normalizarReferencia(producto),normalizarReferencia(formato)]);
+export function capacidadDocumentada(formato:string):number|null {
+  const coincidencias=[...formato.toLocaleLowerCase("es").matchAll(/(\d+(?:[.,]\d+)?)\s*(cl|ml|litros?|l)\b/g)];
+  if(coincidencias.length!==1) return null;
+  const [,numero,unidad]=coincidencias[0],n=Number(numero.replace(",","."));
+  return n>0?n*(unidad==="cl"?1:unidad==="ml"?0.1:100):null;
+}
 export type CosteCompra = {id:string;documento:string;fecha:string;clave:string;unidades:number|null;pagadas:number|null;neto:number|null;tarifa:number|null;prueba:boolean};
 // Cada importe es con IVA. Los abonos son asignaciones documentadas, no porcentajes inventados.
 export type AjusteCoste = {id:string;documento:string;recibido:string;desde:string;hasta:string;clave:string;abonoCentimos:number;regaladas:number};

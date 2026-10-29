@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calcularServicio,configuracionVacia,conectarCompras,costePeriodo,validarConfiguracion,type CosteCompra,type AjusteCoste } from "./escandallo";
+import { calcularServicio,capacidadDocumentada,configuracionVacia,conectarCompras,costePeriodo,validarConfiguracion,type CosteCompra,type AjusteCoste } from "./escandallo";
 const compra=(id:string,fecha:string,unidades:number,neto:number,tarifa:number|null=neto):CosteCompra=>({id,documento:id,fecha,clave:"p",unidades,pagadas:unidades,neto,tarifa,prueba:false});
 const abono:AjusteCoste={id:"a",documento:"abono-2026",recibido:"2027-02-01",desde:"2026-01-01",hasta:"2026-12-31",clave:"p",abonoCentimos:20000,regaladas:0};
 const datos=[compra("enero","2026-01-10",100,1400),compra("julio","2026-07-01",100,1600)];
@@ -61,4 +61,9 @@ test("Adaptadores preservan límites de las muestras y calculan sin duplicar des
   const adaptadas=conectarCompras([],[ref],[c,c],{referencias:[],compras:[]},{referencias:[],compras:[]});
   assert.equal(adaptadas.length,1);assert.equal(adaptadas[0].unidades,48);assert.equal(adaptadas[0].neto,96.8);assert.equal(adaptadas[0].prueba,true);
   assert.throws(()=>conectarCompras([],[ref],[c,{...c,netoCentimos:8000}],{referencias:[],compras:[]},{referencias:[],compras:[]}));
+});
+
+test("Lee capacidad explícita y no inventa formatos ausentes o ambiguos",()=>{
+ assert.equal(capacidadDocumentada("70 cl"),70);assert.equal(capacidadDocumentada("1 litro"),100);assert.equal(capacidadDocumentada("700 ml"),70);
+ assert.equal(capacidadDocumentada("No indicado en factura"),null);assert.equal(capacidadDocumentada("24 botellas"),null);assert.equal(capacidadDocumentada("70 cl / 1 litro"),null);
 });

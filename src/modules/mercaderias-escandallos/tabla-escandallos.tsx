@@ -4,7 +4,7 @@ import { catalogoVenta,origenesValidados } from "./catalogo-venta";
 import type { LineaMercaderia } from "./modelo";
 import type { ReferenciaCoca,CompraCoca } from "./cocacola";
 import type { DatosBajada } from "./bajada";
-import { calcularServicio,claveProducto,conectarCompras,costePeriodo,validarConfiguracion,type ConfiguracionEscandallo } from "./escandallo";
+import { calcularServicio,capacidadDocumentada,claveProducto,conectarCompras,costePeriodo,validarConfiguracion,type ConfiguracionEscandallo } from "./escandallo";
 
 export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,configurada,errores,cargando}:{lineas:LineaMercaderia[];coca:ReferenciaCoca[];comprasCoca:CompraCoca[];bajada:DatosBajada;rojas:DatosBajada;config:ConfiguracionEscandallo;configurada:boolean;errores:string[];cargando:boolean}) {
   const [anio,setAnio]=useState(String(new Date().getFullYear()));
@@ -20,7 +20,8 @@ export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,co
       const productos=catalogoVenta([...origenesValidados(lineas),...coca.map(r=>({...r,proveedor:"Coca-Cola"})),...bajada.referencias.map(r=>({...r,proveedor:"Distribuciones La Bajada"})),...rojas.referencias.map(r=>({...r,proveedor:"Rojas Barrios"}))]);
       const obtener=(clave:string)=>costePeriodo(compras,config.ajustes,clave,desde,hasta);
       const filas=productos.filter(p=>`${p.producto} ${p.formato}`.toLocaleLowerCase("es").includes(buscar.toLocaleLowerCase("es").trim())).flatMap(p=>{
-        const clave=claveProducto(p.producto,p.formato),costes=obtener(clave),receta=config.recetas.find(r=>r.clave===clave);
+        const clave=claveProducto(p.producto,p.formato),costes=obtener(clave),capacidad=capacidadDocumentada(p.formato);
+        const receta=config.recetas.find(r=>r.clave===clave)??(capacidad===null?undefined:{clave,capacidadCl:capacidad});
         const mezclador=receta?.mezclador?obtener(receta.mezclador.clave):undefined;
         return p.formatos.map(formato=>{
           const precios=config.precios.filter(v=>v.clave===clave&&v.formato===formato&&v.desde<=hasta&&v.hasta>=desde);
