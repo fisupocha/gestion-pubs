@@ -2,6 +2,7 @@ import { PantallaMercaderias } from "@/modules/mercaderias-escandallos/pantalla"
 import { crearSupabaseServidor } from "@/lib/supabase-servidor";
 import { redirect } from "next/navigation";
 import { leerCocaPrivada } from "@/modules/mercaderias-escandallos/cocacola-privado";
+import { leerBajadaPrivada } from "@/modules/mercaderias-escandallos/bajada-privado";
 
 export const metadata = { title: "Mercaderías y escandallos | Gestión Pubs" };
 
@@ -17,5 +18,9 @@ export default async function MercaderiasPage() {
   let errorCoca = "";
   try { coca = await leerCocaPrivada(supabase); }
   catch { errorCoca = "No se ha podido leer la prueba privada de Coca-Cola. Reyes Magos sigue disponible."; }
-  return <PantallaMercaderias referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} />;
+  let bajada: Awaited<ReturnType<typeof leerBajadaPrivada>> = {referencias:[],compras:[]};
+  let errorBajada = "";
+  try { bajada = await leerBajadaPrivada(supabase); }
+  catch { errorBajada = "No se ha podido leer la prueba privada de La Bajada. Los otros proveedores siguen disponibles."; }
+  return <PantallaMercaderias referenciasCoca={coca.referencias} comprasCoca={coca.compras} errorCoca={errorCoca} bajada={bajada} errorBajada={errorBajada} />;
 }
