@@ -7,6 +7,7 @@ export const COLUMNAS_MERCADERIAS = [
   { campo: "recibidas", titulo: "Recibidas" },
   { campo: "importeCentimos", titulo: "Importe con IVA" },
   { campo: "precioCompra", titulo: "Precio medio con IVA" },
+  { campo: "acuerdoComercial", titulo: "Acuerdo comercial" },
   { campo: "costeReal", titulo: "Coste real con IVA" },
 ] as const;
 export type CampoOrden = typeof COLUMNAS_MERCADERIAS[number]["campo"];

@@ -111,9 +111,10 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
             <th scope="row" className="border-b border-[#e5d7c8] px-3 py-3 text-left font-normal"><button className="text-left font-bold underline decoration-[#cfb796] underline-offset-4" aria-expanded={abierta === f.clave} onClick={() => setAbierta(abierta === f.clave ? null : f.clave)}>{f.producto}</button><span className="mt-1 block text-xs text-[#806448]">{f.formato}</span></th>
             <td className={celda}>{f.compradas}</td><td className={celda}>{f.bonificadas}</td><td className={celda}>{f.recibidas}</td>
             <td className={celda}>{euros(f.importeCentimos / 100)}</td><td className={celda}>{f.precioCompra === null ? "—" : euros(f.precioCompra)}</td>
+            <td className={celda}>{f.acuerdoComercial}</td>
             <td className={`${celda} bg-[#eef1e6] font-black text-[#35552a]`}>{euros(f.costeReal)}</td>
           </tr>
-          {abierta === f.clave && <tr><td colSpan={7} className="bg-[#f7efe3] p-4">
+          {abierta === f.clave && <tr><td colSpan={COLUMNAS_MERCADERIAS.length} className="bg-[#f7efe3] p-4">
             <p className="mb-2 font-semibold">Detalle del cálculo · importes con IVA</p>
             <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr>{["Fecha", "Proveedor", "Factura", "Albarán", "Local", "Página / línea", "Compradas", "Regaladas", "Importe", "Precio comprado"].map(t => <th key={t} className="p-2 text-left">{t}</th>)}</tr></thead>
               <tbody>{[...f.lineas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.factura.localeCompare(b.factura) || a.pagina - b.pagina || a.linea - b.linea).map(l => <tr key={l.id}>
@@ -121,7 +122,7 @@ export function PantallaMercaderias({ referenciasCoca, comprasCoca, errorCoca, b
               </tr>)}</tbody></table></div>
           </td></tr>}
         </Fragment>)}
-        {filas.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-[#806448]">{aviso ? "Listado no disponible todavía. No se presentan cifras incompletas." : "No hay referencias validadas para mostrar en esta selección."}</td></tr>}
+        {filas.length === 0 && <tr><td colSpan={COLUMNAS_MERCADERIAS.length} className="p-8 text-center text-[#806448]">{aviso ? "Listado no disponible todavía. No se presentan cifras incompletas." : "No hay referencias validadas para mostrar en esta selección."}</td></tr>}
         </tbody>
       </table>
     </div>}

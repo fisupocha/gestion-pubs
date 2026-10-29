@@ -13,6 +13,7 @@ test("media ponderada, IVA incluido, divide entre todas las recibidas", () => {
   const [r] = resumirMercaderias([linea("1"), linea("2", { compradas: 20, bonificadas: 2, importe_iva_centimos: 26000 })], filtros);
   assert.equal(r.compradas, 30); assert.equal(r.recibidas, 32); assert.equal(r.importeCentimos, 38000);
   assert.equal(r.precioCompra, 380 / 30); assert.equal(r.costeReal, 11.875);
+  assert.equal(r.acuerdoComercial,"No");
 });
 test("bonificación en otra línea y céntimos documentales", () => {
   const [r] = resumirMercaderias([linea("1", { compradas: 14, importe_iva_centimos: 19670 }),

@@ -21,6 +21,8 @@ export type ReferenciaMercaderia = {
   clave: string; producto: string; formato: string;
   compradas: number; bonificadas: number; recibidas: number;
   importeCentimos: number; precioCompra: number | null; costeReal: number;
+  /** Sin liquidar acuerdos anuales hasta que el usuario aporte el abono y su ámbito. */
+  acuerdoComercial: "No";
   lineas: LineaMercaderia[];
 };
 
@@ -62,7 +64,7 @@ export function resumirMercaderias(lineas: LineaMercaderia[], filtros: FiltrosMe
     const clave = JSON.stringify([normalizarReferencia(linea.producto), normalizarReferencia(linea.formato)]);
     const grupo = grupos.get(clave) ?? {
       clave, producto: linea.producto, formato: linea.formato, compradas: 0, bonificadas: 0,
-      recibidas: 0, importeCentimos: 0, precioCompra: null, costeReal: 0, lineas: [],
+      recibidas: 0, importeCentimos: 0, precioCompra: null, costeReal: 0, acuerdoComercial: "No" as const, lineas: [],
     };
     grupo.compradas += linea.compradas;
     grupo.bonificadas += linea.bonificadas;
