@@ -5,6 +5,7 @@ import { useAccesoApp } from "@/components/acceso/control-acceso-app";
 import { supabase } from "@/lib/supabase";
 import { leerMercaderias } from "./lectura";
 import { resumirMercaderias, type LineaMercaderia } from "./modelo";
+import { cambiarOrden, COLUMNAS_MERCADERIAS, ordenarReferencias, type OrdenMercaderias } from "./orden";
 
 const euros = (valor: number) => valor.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 const campo = "rounded-lg border border-[#cbb7a5] bg-white px-3 py-2 text-sm text-[#39291f]";
@@ -21,6 +22,7 @@ export function PantallaMercaderias() {
   const [hasta, setHasta] = useState("2026-08-31");
   const [busqueda, setBusqueda] = useState("");
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [orden, setOrden] = useState<OrdenMercaderias>({ campo: "compradas", descendente: true });
 
   useEffect(() => {
     if (!acceso.listo || !acceso.esAdmin) return;
@@ -41,7 +43,8 @@ export function PantallaMercaderias() {
   const enPeriodo = lineas.filter(l => l.fecha >= desde && l.fecha <= hasta && (!local || l.local === local));
   const pendientes = enPeriodo.filter(l => l.estado_validacion !== "validada").length;
   const sinLocal = enPeriodo.filter(l => !l.local).length;
-  const filas = error || calculo.fallo ? [] : calculo.filas;
+  const filas = error || calculo.fallo ? [] : ordenarReferencias(calculo.filas, orden);
+  const etiquetaOrden = COLUMNAS_MERCADERIAS.find(c => c.campo === orden.campo)!.titulo;
   const importe = filas.reduce((s, f) => s + f.importeCentimos, 0) / 100;
   const aviso = error || calculo.fallo;
 
@@ -69,7 +72,7 @@ export function PantallaMercaderias() {
 
     <div role="status" aria-live="polite" className="mb-3 text-sm text-[#6c4c38]">
       {cargando ? "Cargando todas las compras…" : aviso ? aviso : lineas.length === 0 ? "Todavía no hay compras cargadas. El listado de Reyes Magos enero–agosto está pendiente de extracción y validación." :
-        `${filas.length} referencias · ${euros(importe)} · Orden: mayor a menor cantidad comprada.`}
+        `${filas.length} referencias · ${euros(importe)} · Orden: ${etiquetaOrden}, ${orden.campo === "producto" ? (orden.descendente ? "Z–A" : "A–Z") : (orden.descendente ? "mayor a menor" : "menor a mayor")}.`}
       {!cargando && !aviso && pendientes > 0 && <p className="mt-2 font-bold">Acumulado provisional: {pendientes} líneas pendientes de revisión, excluidas del cálculo.</p>}
       {!cargando && !aviso && sinLocal > 0 && <p className="mt-1">{sinLocal} líneas sin local identificado: incluidas únicamente en Riverocio completo.</p>}
     </div>
@@ -78,8 +81,11 @@ export function PantallaMercaderias() {
       <table className="w-full border-collapse text-sm text-[#36271d]">
         <caption className="p-3 text-left text-xs text-[#806448]">Precio medio comprado = importe con IVA ÷ compradas. Coste real = importe con IVA ÷ (compradas + regaladas).</caption>
         <thead className="bg-[#eadbc6] text-[#483420]"><tr>
-          <th className="px-3 py-3 text-left">Producto / formato</th>
-          {["Compradas ↓", "Regaladas", "Recibidas", "Importe con IVA", "Precio medio con IVA", "Coste real con IVA"].map(t => <th key={t} scope="col" className="px-3 py-3 text-right">{t}</th>)}
+          {COLUMNAS_MERCADERIAS.map(c => <th key={c.campo} scope="col" aria-sort={orden.campo === c.campo ? (orden.descendente ? "descending" : "ascending") : "none"} className={`px-3 py-3 ${c.campo === "producto" ? "text-left" : "text-right"}`}>
+            <button type="button" className="rounded px-1 py-1 font-bold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#604732]" onClick={() => setOrden(actual => cambiarOrden(actual, c.campo))}>
+              {c.titulo}{orden.campo === c.campo ? (orden.descendente ? " ↓" : " ↑") : " ↕"}
+            </button>
+          </th>)}
         </tr></thead>
         <tbody>{filas.map(f => <Fragment key={f.clave}>
           <tr className="hover:bg-[#fcf3e6]">
