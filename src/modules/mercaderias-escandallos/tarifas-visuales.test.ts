@@ -14,3 +14,5 @@ test('Tarifa incompleta no se sustituye por coste neto ni una media parcial',()=
  assert.equal(tarifasVisuales([linea,{...linea,id:'otra',tarifa:null}]).get('referencia')?.precio,null);
  assert.equal(tarifasVisuales([{...linea,pagadas:null}]).get('referencia')?.precio,null);
 });
+
+test("Una línea de regalo sin importe no oculta ni rebaja la tarifa",()=>{assert.equal(tarifasVisuales([linea,{...linea,id:"regalo",pagadas:0,tarifa:0,neto:0,unidades:7}]).get("referencia")?.precio,12);});
