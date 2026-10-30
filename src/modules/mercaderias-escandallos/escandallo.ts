@@ -9,7 +9,7 @@ export function capacidadDocumentada(formato:string):number|null {
   const [,numero,unidad]=coincidencias[0],n=Number(numero.replace(",","."));
   return n>0?n*(unidad==="cl"?1:unidad==="ml"?0.1:100):null;
 }
-export type CosteCompra = {id:string;documento:string;fecha:string;clave:string;unidades:number|null;pagadas:number|null;neto:number|null;tarifa:number|null;prueba:boolean};
+export type CosteCompra = {id:string;documento:string;fecha:string;clave:string;unidades:number|null;pagadas:number|null;neto:number|null;tarifa:number|null;prueba:boolean;provisional?:boolean};
 // Cada importe es con IVA. Los abonos son asignaciones documentadas, no porcentajes inventados.
 export type AjusteCoste = {id:string;documento:string;recibido:string;desde:string;hasta:string;clave:string;abonoCentimos:number;regaladas:number};
 export type PrecioVenta = {id:string;clave:string;formato:string;desde:string;hasta:string;centimos:number;origen?:"usuario"|"propuesta";nota?:string};
@@ -78,7 +78,7 @@ export function conectarCompras(lineas:LineaMercaderia[],coca:ReferenciaCoca[],c
     const r=coca.find(r=>r.codigo===c.codigo);if(!r) throw new Error("Referencia de Coca-Cola no encontrada.");
     const calculo=calcularCoca(r,[c]);
     const unidades=(c.cajas+(c.cajasRegaladas??0))*r.unidadesCaja;
-    resultado.push({id:`coca:${c.id}`,documento:c.factura,fecha:c.fecha,clave:claveProducto(r.producto,r.formato),unidades,pagadas:c.cajas*r.unidadesCaja,neto:calculo.precio===null?null:calculo.precio*unidades,tarifa:c.brutoCentimos/100*(1+c.iva/100),prueba:true});
+    resultado.push({id:`coca:${c.id}`,documento:c.factura,fecha:c.fecha,clave:claveProducto(r.producto,r.formato),unidades,pagadas:c.cajas*r.unidadesCaja,neto:calculo.precio===null?null:calculo.precio*unidades,tarifa:c.brutoCentimos/100*(1+c.iva/100),prueba:!c.documentada,provisional:calculo.provisional});
   }
   for(const [nombre,datos] of [["bajada",bajada],["rojas",rojas]] as const) {
     // Reutilizar las validaciones y el cálculo de descuentos de la pantalla de compras.
@@ -117,7 +117,7 @@ export function costePeriodo(compras:CosteCompra[],ajustes:AjusteCoste[],clave:s
   if(neto < -0.0000001) throw new Error("Los abonos superan el coste documentado.");
   const pagadas=seleccion.reduce((s,c)=>s+(c.pagadas??0),0);
   const tarifa=seleccion.length&&pagadas>0&&seleccion.every(c=>c.tarifa!==null&&c.pagadas!==null)?seleccion.reduce((s,c)=>s+c.tarifa!,0)/pagadas:null;
-  return {efectivo:incompleto||incidencias.length||!unidades?null:Math.max(0,neto)/unidades,tarifa,unidades,documentos:seleccion.map(c=>c.documento),ajustes:aplicados,prueba:seleccion.some(c=>c.prueba),incidencias};
+  return {efectivo:incompleto||incidencias.length||!unidades?null:Math.max(0,neto)/unidades,tarifa,unidades,documentos:seleccion.map(c=>c.documento),ajustes:aplicados,prueba:seleccion.some(c=>c.prueba),provisional:seleccion.some(c=>c.provisional),incidencias};
 }
 
 export function calcularServicio(costes:{efectivo:number|null;tarifa:number|null},formato:string,receta:RecetaVenta|undefined,mezclador:{efectivo:number|null;tarifa:number|null}|undefined,precio:number|null) {

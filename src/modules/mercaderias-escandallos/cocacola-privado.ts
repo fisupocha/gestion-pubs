@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CompraCoca, ReferenciaCoca } from "./cocacola";
+import { fusionarComprasCoca, calcularCoca, type CompraCoca, type ReferenciaCoca } from "./cocacola";
 
 // Archivos separados: vaciar compras-prueba.json a [] conserva las condiciones.
 // Bucket privado existente, con lectura de administradores por RLS. Sin service_role.
@@ -10,7 +10,12 @@ export async function leerCocaPrivada(cliente: SupabaseClient) {
     return JSON.parse(await data.text());
   };
   const referencias=await leer("condiciones-2026.json");
-  const compras=await leer("compras-prueba.json");
+  const pruebas=await leer("compras-prueba.json");
+  const {data:documento,error:errorDocumento}=await cliente.storage.from("operativa-adjuntos").download("mercaderias-escandallos/cocacola/compras-documentadas.json");
+  if(errorDocumento&&!["Object not found","The resource was not found"].includes(errorDocumento.message))throw new Error("No se pudieron verificar compras documentadas.");
+  const registro=documento?JSON.parse(await documento.text()):{version:1,compras:[]};
+  if(registro.version!==1||!Array.isArray(registro.compras)||!Array.isArray(pruebas))throw new Error("Compras documentadas no válidas.");
+  const compras=fusionarComprasCoca(pruebas as CompraCoca[],registro.compras);
   if (!Array.isArray(referencias)||!Array.isArray(compras)) throw new Error("Configuración de Coca-Cola no válida.");
   const porcentaje=(n:unknown)=>n===null||(typeof n==="number"&&Number.isFinite(n)&&n>=0&&n<=100);
   const codigos=new Set<string>();
@@ -28,5 +33,6 @@ export async function leerCocaPrivada(cliente: SupabaseClient) {
         (c.cajas===0&&(c.brutoCentimos!==0||c.netoCentimos!==0))||
         typeof c.iva!=="number"||!Number.isFinite(c.iva)||c.iva<0||c.iva>100) throw new Error("Compras de prueba de Coca-Cola no válidas.");
   }
+  for(const ref of referencias)calcularCoca(ref,compras);
   return {referencias:referencias as ReferenciaCoca[],compras:compras as CompraCoca[]};
 }

@@ -32,6 +32,7 @@ export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,co
           const precio=config.precios.find(v=>v.clave===clave&&v.formato===formato&&v.desde<=fecha&&v.hasta>=fecha);
           const resultado=calcularServicio(costes,formato,receta,mezclador,precio?precio.centimos/100:null);
           const incidencias=[...costes.incidencias,...(mezclador?.incidencias??[])];
+          if(costes.provisional||mezclador?.provisional) incidencias.push("Coste provisional: descuento mensual pendiente");
           if(costes.prueba||mezclador?.prueba) incidencias.push("Incluye muestra de prueba");
           if(costes.tarifa===null) incidencias.push("Falta tarifa documentada");
           if(costes.efectivo===null) incidencias.push("Faltan compras o unidades");
