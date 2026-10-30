@@ -12,8 +12,10 @@ export function catalogoVenta(origenes:{producto:string;formato:string;proveedor
     if(/^GINEBRA TANQUERAY 0[.,]0$/.test(nombre)) {grupo="Sin alcohol";formatos=["Copa · 7 cl + refresco"];}
     else if(nombre==="TANQUERAY RANGPUR") {grupo="Alcohol";formatos=["Copa · 7 cl + refresco"];}
     else if(nombre==="BOTELLIN TINTO DE VERANO LA CASERA") {grupo="Tinto de verano";formatos=["Unidad"];}
+    else if(nombre==="ESTUCHE BENJAMINES CODORN") {grupo="Champán y espumosos";formatos=["Benjamín · unidad"]; }
+    else if(/^MINUTE MAID\b/.test(nombre)) {grupo="Zumo";formatos=["Unidad"]; }
     else if(/CHAMP|MOET|CAVA|CODORN/.test(nombre)) {grupo="Champán y espumosos";formatos=["Botella completa"];}
-    else if(/WHISK|RON\b|GINEBRA|GIN\b|VODKA|TEQUILA|LICOR|CREMA|JAGER|JACK DANIEL|BAILEYS|PACHARAN|BRANDY|AMARE|FERNET|PONCHE|MALIBU|APEROL|MARTINI|PATRON/.test(nombre) && !/SIN ALCOHOL|0[.,]0/.test(nombre)) {grupo="Alcohol";formatos=["Copa · 7 cl + refresco","Chupito · 5 cl","Botella completa"];}
+    else if(/FIRE BALL|WHISK|RON\b|GINEBRA|GIN\b|VODKA|TEQUILA|LICOR|CREMA|JAGER|JACK DANIEL|BAILEYS|PACHARAN|BRANDY|AMARE|FERNET|PONCHE|MALIBU|APEROL|MARTINI|PATRON/.test(nombre) && !/SIN ALCOHOL|0[.,]0/.test(nombre)) {grupo="Alcohol";formatos=["Copa · 7 cl + refresco","Chupito · 5 cl","Botella completa"];}
     else if(/AGUA|SOLAN|VICHY/.test(nombre)) {grupo="Agua";formatos=["Unidad"];}
     else if(/MAHOU|ALHAMBRA|CORONITA|CERVEZA|MIXTA/.test(nombre)) {grupo="Cerveza";formatos=["Unidad"];}
     else if(/COCA|FANTA|SPRITE|AQUARIUS|NESTEA|FUZE|SCHWEPP|TONICA|RE[B D]*BULL|MONSTER|^BURN$|ROYAL BLISS|GINGER|REFRESCO/.test(nombre)) {grupo="Refresco";formatos=["Unidad"];}

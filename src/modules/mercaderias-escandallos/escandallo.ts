@@ -12,7 +12,7 @@ export function capacidadDocumentada(formato:string):number|null {
 export type CosteCompra = {id:string;documento:string;fecha:string;clave:string;unidades:number|null;pagadas:number|null;neto:number|null;tarifa:number|null;prueba:boolean};
 // Cada importe es con IVA. Los abonos son asignaciones documentadas, no porcentajes inventados.
 export type AjusteCoste = {id:string;documento:string;recibido:string;desde:string;hasta:string;clave:string;abonoCentimos:number;regaladas:number};
-export type PrecioVenta = {id:string;clave:string;formato:string;desde:string;hasta:string;centimos:number};
+export type PrecioVenta = {id:string;clave:string;formato:string;desde:string;hasta:string;centimos:number;origen?:"usuario"|"propuesta";nota?:string};
 export type RecetaVenta = {clave:string;capacidadCl:number;mezclador?:{clave:string;unidades:number}};
 export type ConfiguracionEscandallo = {version:1;ajustes:AjusteCoste[];precios:PrecioVenta[];recetas:RecetaVenta[]};
 export const configuracionVacia:ConfiguracionEscandallo={version:1,ajustes:[],precios:[],recetas:[]};
@@ -29,6 +29,8 @@ export function validarConfiguracion(c:ConfiguracionEscandallo) {
   for(const a of c.ajustes) {const k=JSON.stringify([a.documento,a.clave,a.desde,a.hasta]);if(documentos.has(k)) throw new Error("Asignación documental duplicada.");documentos.add(k);}
   for(const p of c.precios) {
     if(!p||!p.id||ids.has(p.id)||!p.clave||!p.formato||!rango(p)||!Number.isSafeInteger(p.centimos)||p.centimos<=0) throw new Error("Precio de venta no válido.");
+    if(p.origen!==undefined&&p.origen!=="usuario"&&p.origen!=="propuesta") throw new Error("Origen del precio no válido.");
+    if(p.nota!==undefined&&typeof p.nota!=="string") throw new Error("Nota del precio no válida.");
     ids.add(p.id);
   }
   for(let i=0;i<c.precios.length;i++) for(const p of c.precios.slice(i+1)) {const a=c.precios[i];if(a.clave===p.clave&&a.formato===p.formato&&a.desde<=p.hasta&&p.desde<=a.hasta) throw new Error("Vigencias de precios solapadas.");}
