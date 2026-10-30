@@ -17,7 +17,7 @@ export function TablaEscandallos({lineas,coca,comprasCoca,bajada,rojas,config,co
       validarConfiguracion(config);
       if(!/^\d{4}$/.test(anio)||Number(anio)<1) throw new Error("Introduce un año válido.");
       const desde=`${anio}-01-01`,hasta=`${anio}-12-31`;
-      const compras=conectarCompras(lineas,coca,comprasCoca,bajada,rojas);
+      const compras=conectarCompras(lineas,coca,comprasCoca,bajada,rojas,config.tarifasCompra);
       const productos=catalogoVenta([...origenesValidados(lineas),...coca.map(r=>({...r,proveedor:"Coca-Cola"})),...bajada.referencias.map(r=>({...r,proveedor:"Distribuciones La Bajada"})),...rojas.referencias.map(r=>({...r,proveedor:"Rojas Barrios"}))]);
       const obtener=(clave:string)=>costePeriodo(compras,config.ajustes,clave,desde,hasta);
       const filas=productos.filter(p=>`${p.producto} ${p.formato}`.toLocaleLowerCase("es").includes(buscar.toLocaleLowerCase("es").trim())).flatMap(p=>{

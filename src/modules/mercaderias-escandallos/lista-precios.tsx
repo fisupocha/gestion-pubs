@@ -14,9 +14,9 @@ export function ListaPrecios({lineas,coca,comprasCoca,bajada,rojas,cargando,erro
   const productos=useMemo(()=>catalogoVenta([...origenesValidados(lineas),...coca.map(r=>({...r,proveedor:"Coca-Cola"})),...bajada.referencias.map(r=>({...r,proveedor:"Distribuciones La Bajada"})),...rojas.referencias.map(r=>({...r,proveedor:"Rojas Barrios"}))]),[lineas,coca,bajada,rojas]);
   const tarifas=useMemo(()=>{
     if(cargando||errores.length) return {datos:new Map<string,{precio:number|null;prueba:boolean}>(),error:""};
-    try {return {datos:tarifasVisuales(conectarCompras(lineas,coca,comprasCoca,bajada,rojas)),error:""};}
+    try {return {datos:tarifasVisuales(conectarCompras(lineas,coca,comprasCoca,bajada,rojas,config.tarifasCompra)),error:""};}
     catch(e) {return {datos:new Map<string,{precio:number|null;prueba:boolean}>(),error:e instanceof Error?e.message:"No se pudo leer la tarifa."};}
-  },[lineas,coca,comprasCoca,bajada,rojas,cargando,errores]);
+  },[lineas,coca,comprasCoca,bajada,rojas,cargando,errores,config.tarifasCompra]);
   const tarifaVisual=(producto:string,formato:string)=>{
     const t=tarifas.datos.get(claveProducto(producto,formato));
     return <>{t?.precio!=null&&!/estuche/i.test(formato)?t.precio.toLocaleString("es-ES",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:4}):"Pendiente"}{t?.precio!=null&&t.prueba&&<span className="block text-xs">Muestra de prueba</span>}</>;

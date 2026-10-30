@@ -14,11 +14,13 @@ export type CosteCompra = {id:string;documento:string;fecha:string;clave:string;
 export type AjusteCoste = {id:string;documento:string;recibido:string;desde:string;hasta:string;clave:string;abonoCentimos:number;regaladas:number};
 export type PrecioVenta = {id:string;clave:string;formato:string;desde:string;hasta:string;centimos:number;origen?:"usuario"|"propuesta";nota?:string};
 export type RecetaVenta = {clave:string;capacidadCl:number;mezclador?:{clave:string;unidades:number}};
-export type ConfiguracionEscandallo = {version:1;ajustes:AjusteCoste[];precios:PrecioVenta[];recetas:RecetaVenta[]};
+export type TarifaDocumental = {lineaId:string;documento:string;clave:string;unidadesPagadas:number;baseSinDescuentosCentimos:number;iva:number;fuente:string};
+export type ConfiguracionEscandallo = {version:1;tarifasCompra?:TarifaDocumental[];ajustes:AjusteCoste[];precios:PrecioVenta[];recetas:RecetaVenta[]};
 export const configuracionVacia:ConfiguracionEscandallo={version:1,ajustes:[],precios:[],recetas:[]};
 const fechaValida=(f:string)=>typeof f==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(f)&&!Number.isNaN(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
 export function validarConfiguracion(c:ConfiguracionEscandallo) {
   if(!c||c.version!==1||!Array.isArray(c.ajustes)||!Array.isArray(c.precios)||!Array.isArray(c.recetas)) throw new Error("Configuración de escandallos no válida.");
+  validarTarifas(c.tarifasCompra??[]);
   const ids=new Set<string>();
   const rango=(r:{desde:string;hasta:string})=>fechaValida(r.desde)&&fechaValida(r.hasta)&&r.desde<=r.hasta;
   for(const a of c.ajustes) {
@@ -38,7 +40,18 @@ export function validarConfiguracion(c:ConfiguracionEscandallo) {
   for(const r of c.recetas) {if(!r||!r.clave||recetas.has(r.clave)||!Number.isFinite(r.capacidadCl)||r.capacidadCl<=0||(r.mezclador&&(!r.mezclador.clave||r.mezclador.clave===r.clave||!Number.isFinite(r.mezclador.unidades)||r.mezclador.unidades<=0))) throw new Error("Medida o mezclador no válido.");recetas.add(r.clave);}
 }
 
-export function conectarCompras(lineas:LineaMercaderia[],coca:ReferenciaCoca[],compras:CompraCoca[],bajada:DatosBajada,rojas:DatosBajada):CosteCompra[] {
+function validarTarifas(tarifas:TarifaDocumental[]) {
+  if(!Array.isArray(tarifas)) throw new Error("Tarifas documentales no válidas.");
+  const ids=new Set<string>();
+  for(const t of tarifas) {
+    if(!t||!t.lineaId||ids.has(t.lineaId)||!t.documento||!t.clave||!t.fuente?.trim()||!Number.isSafeInteger(t.unidadesPagadas)||t.unidadesPagadas<=0||!Number.isSafeInteger(t.baseSinDescuentosCentimos)||t.baseSinDescuentosCentimos<=0||!Number.isFinite(t.iva)||t.iva<0||t.iva>100) throw new Error("Tarifa documental inválida o duplicada.");
+    ids.add(t.lineaId);
+  }
+}
+
+export function conectarCompras(lineas:LineaMercaderia[],coca:ReferenciaCoca[],compras:CompraCoca[],bajada:DatosBajada,rojas:DatosBajada,tarifas:TarifaDocumental[]=[]):CosteCompra[] {
+  validarTarifas(tarifas);
+  const porLinea=new Map(tarifas.map(t=>[t.lineaId,t]));
   const resultado:CosteCompra[]=[];
   const ids=new Set<string>(),origenes=new Set<string>();
   for(const l of lineas) {
@@ -46,7 +59,10 @@ export function conectarCompras(lineas:LineaMercaderia[],coca:ReferenciaCoca[],c
     validarLinea(l);ids.add(l.id);
     const origen=JSON.stringify([l.proveedor,l.factura,l.pagina,l.linea]);
     if(origenes.has(origen)) throw new Error("Líneas documentales duplicadas.");origenes.add(origen);
-    resultado.push({id:l.id,documento:l.factura,fecha:l.fecha,clave:claveProducto(l.producto,l.formato),unidades:l.compradas+l.bonificadas,pagadas:l.compradas,neto:l.importe_iva_centimos/100,tarifa:null,prueba:false});
+    const t=porLinea.get(l.id);
+    if(t&&(t.documento!==l.factura||t.clave!==claveProducto(l.producto,l.formato)||t.unidadesPagadas!==l.compradas)) throw new Error("La tarifa no coincide con la línea documental.");
+    const tarifa=l.compradas===0?0:t?t.baseSinDescuentosCentimos/100*(1+t.iva/100):null;
+    resultado.push({id:l.id,documento:l.factura,fecha:l.fecha,clave:claveProducto(l.producto,l.formato),unidades:l.compradas+l.bonificadas,pagadas:l.compradas,neto:l.importe_iva_centimos/100,tarifa,prueba:false});
   }
   const vistasCoca=new Map<string,string>();
   for(const c of compras) {
