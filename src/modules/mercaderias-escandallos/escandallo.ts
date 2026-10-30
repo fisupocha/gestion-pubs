@@ -15,12 +15,19 @@ export type AjusteCoste = {id:string;documento:string;recibido:string;desde:stri
 export type PrecioVenta = {id:string;clave:string;formato:string;desde:string;hasta:string;centimos:number;origen?:"usuario"|"propuesta";nota?:string};
 export type RecetaVenta = {clave:string;capacidadCl:number;mezclador?:{clave:string;unidades:number}};
 export type TarifaDocumental = {lineaId:string;documento:string;clave:string;unidadesPagadas:number;baseSinDescuentosCentimos:number;iva:number;fuente:string};
-export type ConfiguracionEscandallo = {version:1;tarifasCompra?:TarifaDocumental[];ajustes:AjusteCoste[];precios:PrecioVenta[];recetas:RecetaVenta[]};
+export type TarifaReferencia = {id:string;clave:string;documento:string;fecha:string;unidades:number;baseCentimos:number;iva:number;fuente:string};
+export type ConfiguracionEscandallo = {version:1;tarifasReferencia?:TarifaReferencia[];tarifasCompra?:TarifaDocumental[];ajustes:AjusteCoste[];precios:PrecioVenta[];recetas:RecetaVenta[]};
 export const configuracionVacia:ConfiguracionEscandallo={version:1,ajustes:[],precios:[],recetas:[]};
 const fechaValida=(f:string)=>typeof f==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(f)&&!Number.isNaN(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
 export function validarConfiguracion(c:ConfiguracionEscandallo) {
   if(!c||c.version!==1||!Array.isArray(c.ajustes)||!Array.isArray(c.precios)||!Array.isArray(c.recetas)) throw new Error("Configuración de escandallos no válida.");
   validarTarifas(c.tarifasCompra??[]);
+  if(c.tarifasReferencia!==undefined&&!Array.isArray(c.tarifasReferencia)) throw new Error("Referencias de tarifa inválidas.");
+  const referencias=new Set<string>();
+  for(const t of c.tarifasReferencia??[]) {
+    if(!t||!t.id||referencias.has(t.id)||!t.clave||!t.documento||!t.fuente?.trim()||!fechaValida(t.fecha)||!Number.isSafeInteger(t.unidades)||t.unidades<=0||!Number.isSafeInteger(t.baseCentimos)||t.baseCentimos<=0||!Number.isFinite(t.iva)||t.iva<0||t.iva>100) throw new Error("Referencia de tarifa inválida o duplicada.");
+    referencias.add(t.id);
+  }
   const ids=new Set<string>();
   const rango=(r:{desde:string;hasta:string})=>fechaValida(r.desde)&&fechaValida(r.hasta)&&r.desde<=r.hasta;
   for(const a of c.ajustes) {

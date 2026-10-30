@@ -14,12 +14,12 @@ export function ListaPrecios({lineas,coca,comprasCoca,bajada,rojas,cargando,erro
   const productos=useMemo(()=>catalogoVenta([...origenesValidados(lineas),...coca.map(r=>({...r,proveedor:"Coca-Cola"})),...bajada.referencias.map(r=>({...r,proveedor:"Distribuciones La Bajada"})),...rojas.referencias.map(r=>({...r,proveedor:"Rojas Barrios"}))]),[lineas,coca,bajada,rojas]);
   const tarifas=useMemo(()=>{
     if(cargando||errores.length) return {datos:new Map<string,{precio:number|null;prueba:boolean}>(),error:""};
-    try {return {datos:tarifasVisuales(conectarCompras(lineas,coca,comprasCoca,bajada,rojas,config.tarifasCompra)),error:""};}
+    try {return {datos:tarifasVisuales(conectarCompras(lineas,coca,comprasCoca,bajada,rojas,config.tarifasCompra),config.tarifasReferencia),error:""};}
     catch(e) {return {datos:new Map<string,{precio:number|null;prueba:boolean}>(),error:e instanceof Error?e.message:"No se pudo leer la tarifa."};}
-  },[lineas,coca,comprasCoca,bajada,rojas,cargando,errores,config.tarifasCompra]);
+  },[lineas,coca,comprasCoca,bajada,rojas,cargando,errores,config.tarifasCompra,config.tarifasReferencia]);
   const tarifaVisual=(producto:string,formato:string)=>{
     const t=tarifas.datos.get(claveProducto(producto,formato));
-    return <>{t?.precio!=null&&!/estuche/i.test(formato)?t.precio.toLocaleString("es-ES",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:4}):"Pendiente"}{t?.precio!=null&&t.prueba&&<span className="block text-xs">Muestra de prueba</span>}</>;
+    return <>{t?.precio!=null&&!/estuche/i.test(formato)?t.precio.toLocaleString("es-ES",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:4}):"Pendiente"}</>;
   };
   const seleccion=productos.filter(r=>(!grupo||r.grupo===grupo)&&`${r.producto} ${r.formato} ${r.proveedores.join(" ")}`.toLocaleLowerCase("es").includes(buscar.trim().toLocaleLowerCase("es")));
   const datoPrecio=(producto:string,formatoOrigen:string,formatoVenta:string)=>{
@@ -39,7 +39,7 @@ export function ListaPrecios({lineas,coca,comprasCoca,bajada,rojas,cargando,erro
     <p className="my-3 text-sm">Referencias disponibles en compras y catálogos cargados, sin limitar por fecha o local. Grupos iniciales propuestos, pendientes de confirmar contigo. Precios de venta con IVA vigentes, compartidos con los escandallos; los no asignados quedan pendientes.</p>
     <p className="mb-4 text-sm">Copa: 7 cl de alcohol + refresco. Chupito: 5 cl. Una botella de 70 cl rinde 10 copas o 14 chupitos; otras capacidades tendrán su rendimiento correspondiente. Botella completa: su capacidad indicada.</p>
     <p className="mb-3 rounded-lg bg-blue-100 p-3 text-sm text-blue-950">Azul = precio propuesto por Work, pendiente de confirmar. Los demás precios los has confirmado tú. Propuestas por comparación; no acreditan margen suficiente sin tarifa, capacidad y receta documentadas.</p>
-    <p className="mb-3 text-sm">Tarifa con IVA: coste medio ponderado de la botella entera o unidad en las compras cargadas, sin descuentos ni regalos. Se repite en copa, chupito y botella; no incluye refresco ni hielo. Sin tarifa documentada aparece pendiente. Licores: pendientes de definir.</p>
+    <p className="mb-3 text-sm">Tarifa con IVA: coste de la botella entera o unidad documentado antes de descuentos y regalos. Si hay varios precios, media ponderada de los documentos cargados. Solo datos contrastados; los ensayos no se utilizan en esta columna. Se repite en copa, chupito y botella; no incluye refresco ni hielo. Sin tarifa documentada aparece pendiente. Licores: pendientes de definir.</p>
     {tarifas.error&&<p role="alert">{tarifas.error}</p>}
     {errores.length>0&&<p role="alert" className="mb-3 font-bold text-red-800">Listado incompleto: {errores.join(" ")}</p>}
     <div className="mb-4 flex flex-wrap gap-3 rounded-xl bg-[#fffaf3] p-4">
