@@ -17,11 +17,12 @@ export function TablaCocaCola({ filtros, referencias, compras }: { filtros: Filt
   const filas=ordenarCoca(calculo.filas,orden.campo,orden.descendente);
   const cantidad=filas.reduce((s,r)=>s+(r.cajas ?? 0),0);
   const regalos=filas.reduce((s,r)=>s+(r.regaladas ?? 0),0);
+  const ivaVerificado=compras.length>0&&compras.every(c=>c.documentada?.ivaVerificado===true);
   return <>
     <div role="status" className="mb-3 rounded-xl border border-[#c8ab77] bg-[#fff5df] p-3 text-sm text-[#503a20]">
       <p className="font-bold">Coca-Cola · Compras documentadas</p>
-      <p className="mt-1">{cantidad} cajas compradas + {regalos} regaladas = {cantidad + regalos} recibidas · {filas.length} referencias de catálogo. Factura de junio de Tarantino: páginas 1 y 2 incorporadas; falta página 3. Envases separados, sin tratarlos como bebidas.</p>
-      <p className="mt-1">Tarifa original, descuento directo y Punto Verde se conservan por línea. IVA del 21 % según el registro contable de la factura; pendiente cotejar su resumen de impuestos. La lista de precios y los escandallos leen estas mismas compras.</p>
+      <p className="mt-1">{cantidad} cajas compradas + {regalos} regaladas = {cantidad + regalos} recibidas · {filas.length} referencias de catálogo. Compras desglosadas por documento. Envases separados, sin tratarlos como bebidas.</p>
+      <p className="mt-1">Tarifa original, descuento directo y Punto Verde se conservan por línea. {ivaVerificado ? "IVA del 21 % cotejado con el resumen de impuestos de la factura." : "IVA del 21 % según el registro contable; pendiente cotejar el resumen de impuestos."} La lista de precios y los escandallos leen estas mismas compras.</p>
       <p className="mt-1">Abonos mensuales y semestrales calculados con las condiciones conocidas. Si falta el mensual, el precio es provisional y no incorpora ese descuento desconocido. No se resta dos veces el descuento directo.</p>
       {calculo.error && <p role="alert" className="mt-2 font-bold">{calculo.error}</p>}
     </div>

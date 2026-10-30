@@ -8,7 +8,7 @@ export type CompraCoca = {
   id: string; codigo: string; fecha: string; factura: string; local: string; cajas: number;
   /** Opcional para mantener las compras anteriores compatibles; ausencia = 0. */
   cajasRegaladas?: number;
-  documentada?: {pagina:number;linea:number;precioCajaCentimos:number;descuentoCentimos:number;puntoVerdeCentimos:number;fuente:string};
+  documentada?: {ivaVerificado?:boolean;pagina:number;linea:number;precioCajaCentimos:number;descuentoCentimos:number;puntoVerdeCentimos:number;fuente:string};
   /** Céntimos SIN IVA documentales. Neto ya contiene descuento directo y punto verde. */
   brutoCentimos: number; netoCentimos: number; iva: number;
 };
